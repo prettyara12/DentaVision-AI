@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+/* Tokens: docs/design-system.md §3. Light = default; dark via system or data-theme; lightbox is always dark. */
+:root {
+  --bg: #f2f3ef;
+  --surface: #e8eae4;
+  --surface-2: #dde0d9;
+  --ink: #0d1214;
+  --ink-2: #4c5558;
+  --rule: #cfd4cc;
+  --accent: #0b7a57;
+  --accent-ink: #f2f3ef;
+  --finding-attention: #c8363b;
+  --finding-treatment: #2e59c9;
+  --finding-anatomy: #6b7376;
+  --warn: #a86a00;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0a0d0e;
+    --surface: #121718;
+    --surface-2: #1a2022;
+    --ink: #e6ebea;
+    --ink-2: #8e9a9b;
+    --rule: #263033;
+    --accent: #7df0c2;
+    --accent-ink: #06231a;
+    --finding-attention: #ff6b6f;
+    --finding-treatment: #7fa2ff;
+    --finding-anatomy: #8e9a9b;
+    --warn: #f2b54a;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"],
+[data-room="lightbox"] {
+  --bg: #0a0d0e;
+  --surface: #121718;
+  --surface-2: #1a2022;
+  --ink: #e6ebea;
+  --ink-2: #8e9a9b;
+  --rule: #263033;
+  --accent: #7df0c2;
+  --accent-ink: #06231a;
+  --finding-attention: #ff6b6f;
+  --finding-treatment: #7fa2ff;
+  --finding-anatomy: #8e9a9b;
+  --warn: #f2b54a;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-rule: var(--rule);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-finding-attention: var(--finding-attention);
+  --color-finding-treatment: var(--finding-treatment);
+  --color-finding-anatomy: var(--finding-anatomy);
+  --color-warn: var(--warn);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --radius-sm: 4px;
+  --radius-md: 8px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
