@@ -7,7 +7,7 @@ import time
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Header, UploadFile
+from fastapi import FastAPI, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
@@ -17,6 +17,8 @@ from app.prefilter import MAX_BYTES, InputError, decode_image, looks_like_photo
 log = logging.getLogger("dentavision.api")
 
 QUEUE_TIMEOUT_S = 60
+# Image limit plus room for multipart boundaries and headers.
+MAX_BODY_BYTES = MAX_BYTES + 64 * 1024
 LOW_QUALITY_WIDTH = 800
 
 state: dict = {"status": "loading", "model_version": None, "detector": None}
@@ -56,11 +58,28 @@ def health() -> dict:
     return {"status": state["status"], "model_version": state["model_version"]}
 
 
-@app.post("/v1/analyze")
-async def analyze(image: UploadFile, x_api_secret: str = Header(default="")):
+@app.middleware("http")
+async def guard_analyze(request: Request, call_next):
+    # Starlette parses (and spools to disk) the whole multipart body before the handler runs,
+    # so the secret and the size limit must be enforced here, before the body is read.
+    if request.url.path != "/v1/analyze":
+        return await call_next(request)
     secret = os.environ.get("API_SECRET", "")
-    if not secret or not hmac.compare_digest(x_api_secret.encode(), secret.encode()):
+    given = request.headers.get("x-api-secret", "")
+    if not secret or not hmac.compare_digest(given.encode(), secret.encode()):
         return error(401, "unauthorized")
+    length = request.headers.get("content-length")
+    if length is None or not length.isdigit():
+        return error(411, "length_required")
+    if int(length) > MAX_BODY_BYTES:
+        return error(413, "too_large")
+    return await call_next(request)
+
+
+@app.post("/v1/analyze")
+async def analyze(image: UploadFile):
+    if state["status"] == "error":
+        return error(503, "model_unavailable")
     detector: Detector | None = state["detector"]
     if detector is None:
         return error(503, "loading")

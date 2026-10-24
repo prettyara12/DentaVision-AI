@@ -85,6 +85,50 @@ def test_loading_before_model_ready(client) -> None:
     assert (response.status_code, response.json()) == (503, {"code": "loading"})
 
 
+def test_failed_model_load_is_not_reported_as_loading(client) -> None:
+    def boom():
+        raise OSError("download failed")
+
+    main.load_detector(boom)
+    response = post(client, png())
+    assert (response.status_code, response.json()) == (503, {"code": "model_unavailable"})
+
+
+def raw_post(client, body, headers: dict[str, str]):
+    return client.post(
+        "/v1/analyze",
+        content=body,
+        headers={"Content-Type": "multipart/form-data; boundary=x", **headers},
+    )
+
+
+def test_oversized_body_is_rejected_before_parsing(client, monkeypatch) -> None:
+    detector = ready([TOOTH])
+    # Fail loudly if the multipart parser is reached at all.
+    monkeypatch.setattr(main, "decode_image", lambda _: pytest.fail("body was parsed"))
+    body = b"\0" * (main.MAX_BODY_BYTES + 1)
+    response = raw_post(client, body, {"X-API-Secret": SECRET})
+    assert (response.status_code, response.json()) == (413, {"code": "too_large"})
+    assert detector.calls == 0
+
+
+def test_secret_is_checked_before_body_size(client) -> None:
+    body = b"\0" * (main.MAX_BODY_BYTES + 1)
+    response = raw_post(client, body, {"X-API-Secret": "wrong"})
+    assert (response.status_code, response.json()) == (401, {"code": "unauthorized"})
+
+
+def test_body_without_content_length_is_rejected(client) -> None:
+    ready([TOOTH])
+
+    def chunks():
+        yield b"--x\r\n"
+
+    # A generator body is sent with chunked transfer encoding, i.e. no Content-Length.
+    response = raw_post(client, chunks(), {"X-API-Secret": SECRET})
+    assert (response.status_code, response.json()) == (411, {"code": "length_required"})
+
+
 @pytest.mark.parametrize(
     ("data", "status", "code"),
     [

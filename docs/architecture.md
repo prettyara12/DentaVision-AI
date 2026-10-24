@@ -74,12 +74,14 @@ Error:
 | Status | `code` | Kapan |
 |---|---|---|
 | 401 | `unauthorized` | Secret salah |
-| 413 | `too_large` | > 4 MB |
+| 411 | `length_required` | Request tanpa `Content-Length` (mis. chunked) |
+| 413 | `too_large` | Body > 4 MB + 64 KB, gambar > 4 MB, atau > 25 juta piksel |
 | 415 | `unsupported_type` | Bukan JPEG/PNG (dicek dari magic bytes) |
 | 422 | `not_xray` | Pre-filter: > 15% piksel bersaturasi > 40 **dan** rata-rata saturasi > 20 (HSV, 0–255), pola yang sama dengan repo skripsi. Dicek sebelum model jalan |
-| 503 | `busy` / `loading` | Antrean > 60 dtk / model belum siap |
+| 503 | `busy` / `loading` / `model_unavailable` | Antrean > 60 dtk / model sedang dimuat / model gagal dimuat (`/health` = `error`, perlu restart) |
 
 - Hasil tanpa deteksi tetap 200 dengan `detections: []`. Tidak ada aturan "harus ada kelas gigi": pada 31 panoramik contoh, model tidak pernah mendeteksi `Permanent Teeth`/`Primary teeth` (keputusan pengguna 2026-10-25, #6). Validasi utama "apakah ini X-ray gigi" ada di Gemini Vision (web, [ai-design.md §1](ai-design.md#1-validasi-x-ray-validate1)).
+- Secret dan `Content-Length` dicek di middleware **sebelum** body dibaca, karena Starlette mem-parse dan men-spool seluruh multipart sebelum handler jalan. Urutan: 401 → 411 → 413.
 - Decode memakai Pillow; gambar > 25 juta piksel ditolak `too_large` (perlindungan decompression bomb). File rusak di balik magic bytes yang valid ditolak `unsupported_type`.
 
 ### 3.2 Model
