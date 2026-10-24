@@ -93,7 +93,7 @@ Laporan PDF, ensiklopedia 31 kondisi, halaman profil/pengaturan, heatmap per kot
 - Gambar dikompres di browser (sisi terpanjang 2048 px, JPEG) sebelum dikirim.
 - File bukan gambar atau > 10 MB ditolak di browser **dan** server.
 - Gambar yang bukan X-ray gigi ditolak dengan pesan jelas dan **tidak memakai kuota**.
-- Kalau Gemini tidak tersedia, validasi cukup memakai pre-filter + cek "ada gigi terdeteksi".
+- Kalau Gemini tidak tersedia, validasi cukup memakai pre-filter saturasi warna di API inferensi.
 
 **US-03 Lihat hasil.** Sebagai pengguna, saya ingin melihat temuan di atas X-ray saya.
 - Kotak temuan berwarna sesuai kelompok, dengan label kelas + confidence.

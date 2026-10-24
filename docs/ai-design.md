@@ -18,7 +18,7 @@ Urutan di `POST /api/scans`:
    { "is_dental_panoramic": true, "confidence": 0.0, "reason": "string" }
    ```
 2. Tolak bila `is_dental_panoramic = false` dan `confidence ≥ 0.6`.
-3. Kalau Gemini gagal (timeout 8 dtk, 429 di semua model, JSON invalid): lanjut tanpa validasi Gemini. API inferensi tetap menjalankan pre-filter saturasi + cek "ada gigi terdeteksi".
+3. Kalau Gemini gagal (timeout 8 dtk, 429 di semua model, JSON invalid): lanjut tanpa validasi Gemini. API inferensi tetap menjalankan pre-filter saturasi warna.
 
 Prompt (system):
 

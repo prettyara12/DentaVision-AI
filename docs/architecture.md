@@ -31,7 +31,7 @@ api/                      FastAPI, Python 3.13
   app/main.py             endpoint
   app/model.py            load model dari HF Hub, inferensi
   app/gradcam.py          Grad-CAM per kelas
-  app/prefilter.py        cek saturasi warna (OpenCV)
+  app/prefilter.py        cek tipe/ukuran + decode upload, cek saturasi warna
   tests/
   Dockerfile              image untuk HF Spaces
 supabase/
@@ -47,7 +47,7 @@ docs/
 
 | Method | Path | Auth | Fungsi |
 |---|---|---|---|
-| `GET` | `/health` | — | `{"status": "ready" \| "loading", "model_version": "..."}` |
+| `GET` | `/health` | — | `{"status": "ready" \| "loading" \| "error", "model_version": "..."}`. `error` = model gagal dimuat (lihat log) |
 | `POST` | `/v1/analyze` | Header `X-API-Secret` | Multipart `image` (JPEG/PNG ≤ 4 MB) → hasil |
 
 Respons `/v1/analyze` (200):
@@ -76,8 +76,11 @@ Error:
 | 401 | `unauthorized` | Secret salah |
 | 413 | `too_large` | > 4 MB |
 | 415 | `unsupported_type` | Bukan JPEG/PNG (dicek dari magic bytes) |
-| 422 | `not_xray` | Pre-filter: saturasi warna tinggi, atau tidak ada `Permanent Teeth`/`Primary teeth` terdeteksi |
+| 422 | `not_xray` | Pre-filter: > 15% piksel bersaturasi > 40 **dan** rata-rata saturasi > 20 (HSV, 0–255), pola yang sama dengan repo skripsi. Dicek sebelum model jalan |
 | 503 | `busy` / `loading` | Antrean > 60 dtk / model belum siap |
+
+- Hasil tanpa deteksi tetap 200 dengan `detections: []`. Tidak ada aturan "harus ada kelas gigi": pada 31 panoramik contoh, model tidak pernah mendeteksi `Permanent Teeth`/`Primary teeth` (keputusan pengguna 2026-10-25, #6). Validasi utama "apakah ini X-ray gigi" ada di Gemini Vision (web, [ai-design.md §1](ai-design.md#1-validasi-x-ray-validate1)).
+- Decode memakai Pillow; gambar > 25 juta piksel ditolak `too_large` (perlindungan decompression bomb). File rusak di balik magic bytes yang valid ditolak `unsupported_type`.
 
 ### 3.2 Model
 
