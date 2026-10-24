@@ -16,7 +16,7 @@ Setiap milestone berakhir dengan sesuatu yang bisa di-demo. Fitur `F*` dan story
 
 | Item | Dibutuhkan sebelum | Pemilik |
 |---|---|---|
-| Nama & visibilitas model repo HF Hub | M0 selesai | Pemilik repo |
+| ~~Nama & visibilitas model repo HF Hub~~ ✅ 2026-10-25: `adrielwalintukan/dentavision-yolov8m-resnet50`, publik, diunggah Adriel atas izin pemilik repo (#5) | M0 selesai | Pemilik repo |
 | Sumber + lisensi dataset dan gambar contoh | M2 selesai | Pemilik repo |
 | Akses split validasi untuk metrik per kelas | M5 (halaman Tentang model) | Pemilik repo |
 | `GEMINI_FALLBACK_MODEL` | M3 | Agent, verifikasi dokumentasi resmi |

@@ -81,7 +81,7 @@ Error:
 
 ### 3.2 Model
 
-- Checkpoint `best_resnet50.pt` disimpan di model repo HF Hub (`HF_MODEL_REPO`, `HF_MODEL_FILE`, `HF_TOKEN` bila privat). Diunduh sekali saat start lewat `huggingface_hub`, lalu di-cache.
+- Checkpoint `best_resnet50.pt` disimpan di model repo HF Hub publik [`adrielwalintukan/dentavision-yolov8m-resnet50`](https://huggingface.co/adrielwalintukan/dentavision-yolov8m-resnet50) (lisensi AGPL-3.0, mengikuti Ultralytics), dibaca dari `HF_MODEL_REPO` + `HF_MODEL_FILE`. Karena publik, `HF_TOKEN` tidak dibutuhkan. Diunduh sekali saat start lewat `huggingface_hub`, lalu di-cache.
 - `ultralytics==8.4.161` di-pin, sama dengan versi training. Checkpoint memakai modul `TorchVision` + `Index` yang butuh versi ini.
 - Inferensi: `imgsz=640`, `conf=0.10`, `iou=0.7`, device `cuda` bila ada, selain itu `cpu`.
 - **Satu inferensi dalam satu waktu** (`asyncio.Lock`, 1 worker uvicorn). Ini antrean sederhana untuk CPU gratis.
@@ -98,7 +98,7 @@ Spike M1: bandingkan SPPF (stride 32, kasar) dengan output neck P3 (stride 8, le
 
 ### 3.4 Deploy
 
-- HF Space tipe Docker, `api/Dockerfile`, port 7860. Secret Space: `API_SECRET`, `HF_TOKEN`.
+- HF Space tipe Docker, `api/Dockerfile`, port 7860. Secret Space: `API_SECRET` (`HF_TOKEN` hanya bila model repo dijadikan privat).
 - Torch versi CPU (`--index-url https://download.pytorch.org/whl/cpu`) supaya image kecil.
 
 ## 4. Web (`web/`)
@@ -233,9 +233,9 @@ Divalidasi lazy di `src/lib/env.ts` (Zod) supaya `next build` di CI tidak butuh 
 | Variabel | Contoh |
 |---|---|
 | `API_SECRET` | sama dengan `INFERENCE_API_SECRET` |
-| `HF_MODEL_REPO` | ditentukan pemilik repo di M0 |
+| `HF_MODEL_REPO` | `adrielwalintukan/dentavision-yolov8m-resnet50` (juga repo variable GitHub Actions) |
 | `HF_MODEL_FILE` | `best_resnet50.pt` |
-| `HF_TOKEN` | bila model repo privat |
+| `HF_TOKEN` | tidak perlu selama model repo publik |
 | `MODEL_PATH` | opsional: path lokal, melewati HF Hub (dev) |
 
 ## 7. Pengujian
