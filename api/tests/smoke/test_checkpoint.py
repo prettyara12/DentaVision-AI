@@ -19,6 +19,7 @@ def checkpoint_path() -> Path:
         pytest.fail("Set MODEL_PATH or HF_MODEL_REPO (see issue #5)")
     from huggingface_hub import hf_hub_download
 
+    # hf_hub_download reads the HF_TOKEN env var itself, so private repos need no token arg.
     return Path(hf_hub_download(repo, os.environ.get("HF_MODEL_FILE", "best_resnet50.pt")))
 
 
@@ -34,3 +35,13 @@ def test_checkpoint_loads_and_runs_on_cpu() -> None:
     image = np.full((640, 1280, 3), 90, dtype=np.uint8)
     results = model.predict(image, imgsz=640, conf=0.10, device="cpu", verbose=False)
     assert len(results) == 1
+
+    # Output contract used by /v1/analyze (#6): N boxes with xyxy, conf, cls on the original image.
+    result = results[0]
+    assert result.orig_shape == (640, 1280)
+    boxes = result.boxes
+    n = len(boxes)
+    assert tuple(boxes.xyxy.shape) == (n, 4)
+    assert tuple(boxes.conf.shape) == (n,)
+    assert tuple(boxes.cls.shape) == (n,)
+    assert all(0 <= int(c) < 31 for c in boxes.cls)
