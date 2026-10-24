@@ -6,8 +6,40 @@ import pytest
 
 pytestmark = pytest.mark.smoke
 
-# docs/class-catalog.md: id order must match the checkpoint.
-EXPECTED_FIRST_LAST = ("Caries", "Primary teeth")
+# Column `model.names` of docs/class-catalog.md, in id order. A swap anywhere mislabels detections.
+EXPECTED_NAMES = [
+    "Caries",
+    "Crown",
+    "Filling",
+    "Implant",
+    "Malaligned",
+    "Mandibular Canal",
+    "Missing teeth",
+    "Periapical lesion",
+    "Retained root",
+    "Root Canal Treatment",
+    "Root Piece",
+    "impacted tooth",
+    "maxillary sinus",
+    "Bone Loss",
+    "Fracture teeth",
+    "Permanent Teeth",
+    "Supra Eruption",
+    "TAD",
+    "abutment",
+    "attrition",
+    "bone defect",
+    "gingival former",
+    "metal band",
+    "orthodontic brackets",
+    "permanent retainer",
+    "post - core",
+    "plating",
+    "wire",
+    "Cyst",
+    "Root resorption",
+    "Primary teeth",
+]
 
 
 def checkpoint_path() -> Path:
@@ -28,8 +60,8 @@ def test_checkpoint_loads_and_runs_on_cpu() -> None:
 
     model = YOLO(str(checkpoint_path()))
     assert model.task == "detect"
-    assert len(model.names) == 31
-    assert (model.names[0], model.names[30]) == EXPECTED_FIRST_LAST
+    # model.names is {id: name}; compare the whole mapping, not just its ends.
+    assert dict(model.names) == dict(enumerate(EXPECTED_NAMES))
 
     # Synthetic grayscale image: checks the pipeline runs, not detection quality.
     image = np.full((640, 1280, 3), 90, dtype=np.uint8)
