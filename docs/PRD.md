@@ -137,7 +137,7 @@ Laporan PDF, ensiklopedia 31 kondisi, halaman profil/pengaturan, heatmap per kot
 
 ### Semua
 
-**US-13 Bahasa.** Toggle ID/EN di header, tersimpan di cookie (dan profil bila login). Default dari `Accept-Language`.
+**US-13 Bahasa.** Toggle ID/EN di header mengganti prefix URL (`/id`, `/en`) dan tersimpan di cookie (dan profil bila login). URL tanpa prefix diarahkan ke cookie, lalu `Accept-Language`, lalu `id`.
 
 **US-14 Kuota.** Saat kuota habis, tampil sisa waktu reset dan ajakan login (untuk tamu). Angka ada di §7.
 
