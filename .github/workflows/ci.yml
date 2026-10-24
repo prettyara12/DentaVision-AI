@@ -45,3 +45,19 @@ jobs:
       # Env is parsed lazily (src/lib/env.ts), so the build needs no secrets.
       - name: Build production bundle
         run: npm run build
+
+  database-quality-gate:
+    name: Database pgTAP & RLS Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.117.0
+      - name: Start Supabase local containers
+        run: supabase start
+      - name: Run pgTAP test suites
+        run: supabase test db
