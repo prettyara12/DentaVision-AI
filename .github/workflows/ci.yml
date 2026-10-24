@@ -76,3 +76,19 @@ jobs:
         run: pip install -r requirements.txt -r requirements-dev.txt --extra-index-url https://download.pytorch.org/whl/cpu
       - name: Inference with real checkpoint
         run: pytest -m smoke
+
+  database-quality-gate:
+    name: Database pgTAP & RLS Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.117.0
+      - name: Start Supabase local containers
+        run: supabase start
+      - name: Run pgTAP test suites
+        run: supabase test db
