@@ -74,5 +74,5 @@ jobs:
           key: hf-${{ vars.HF_MODEL_REPO }}-best_resnet50
       - name: Install dependencies
         run: pip install -r requirements.txt -r requirements-dev.txt --extra-index-url https://download.pytorch.org/whl/cpu
-      - name: Inference + Grad-CAM with real checkpoint
+      - name: Inference with real checkpoint
         run: pytest -m smoke
