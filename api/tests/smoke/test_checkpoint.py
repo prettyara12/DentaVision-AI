@@ -1,8 +1,7 @@
-import os
-from pathlib import Path
-
 import numpy as np
 import pytest
+
+from app.model import YoloDetector, checkpoint_path
 
 pytestmark = pytest.mark.smoke
 
@@ -42,23 +41,10 @@ EXPECTED_NAMES = [
 ]
 
 
-def checkpoint_path() -> Path:
-    local = os.environ.get("MODEL_PATH")
-    if local:
-        return Path(local)
-    repo = os.environ.get("HF_MODEL_REPO")
-    if not repo:
-        pytest.fail("Set MODEL_PATH or HF_MODEL_REPO (see issue #5)")
-    from huggingface_hub import hf_hub_download
-
-    # hf_hub_download reads the HF_TOKEN env var itself, so private repos need no token arg.
-    return Path(hf_hub_download(repo, os.environ.get("HF_MODEL_FILE", "best_resnet50.pt")))
-
-
 def test_checkpoint_loads_and_runs_on_cpu() -> None:
     from ultralytics import YOLO
 
-    model = YOLO(str(checkpoint_path()))
+    model = YOLO(str(checkpoint_path()))  # MODEL_PATH or HF_MODEL_REPO
     assert model.task == "detect"
     # model.names is {id: name}; compare the whole mapping, not just its ends.
     assert dict(model.names) == dict(enumerate(EXPECTED_NAMES))
@@ -77,3 +63,13 @@ def test_checkpoint_loads_and_runs_on_cpu() -> None:
     assert tuple(boxes.conf.shape) == (n,)
     assert tuple(boxes.cls.shape) == (n,)
     assert all(0 <= int(c) < 31 for c in boxes.cls)
+
+
+def test_detector_wrapper_returns_normalized_detections() -> None:
+    detector = YoloDetector(checkpoint_path())
+    assert detector.version.startswith("yolov8m-resnet50@")
+    detections = detector.detect(np.full((512, 1024, 3), 90, dtype=np.uint8))
+    for d in detections:
+        assert set(d) == {"class_id", "confidence", "box"}
+        assert 0 <= d["class_id"] < 31 and 0.10 <= d["confidence"] <= 1
+        assert len(d["box"]) == 4 and all(0 <= v <= 1 for v in d["box"])
