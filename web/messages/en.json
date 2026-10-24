@@ -1,0 +1,6 @@
+{
+  "meta.description": "Upload a dental panoramic X-ray and see what the AI marks.",
+  "home.title": "Read your dental panoramic X-ray",
+  "home.status": "In development",
+  "disclaimer.short": "DentaVision AI results are not a medical diagnosis. Consult a dentist."
+}

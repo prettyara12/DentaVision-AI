@@ -132,9 +132,9 @@ Setiap handler: autentikasi (opsional untuk tamu) → otorisasi kepemilikan → 
 
 ### 4.4 i18n
 
-File `messages/{id,en}.json` + helper `t()` kecil di `src/lib/i18n.ts`. Locale dari cookie `locale`, default dari `Accept-Language`. URL tidak diberi prefix bahasa.
+File `messages/{id,en}.json` + helper `t()` kecil di `src/lib/i18n.ts`. Semua halaman ada di bawah segmen `app/[lang]/` (`/id/...`, `/en/...`), sesuai panduan i18n resmi Next.js 16. Dengan `cacheComponents`, pola ini membuat halaman tetap bisa di-prerender statis, dan `<html lang>` benar per bahasa.
 
-`shortcut: tanpa prefix /en di URL, SEO bahasa Inggris lemah; upgrade ke next-intl + prefix bila trafik organik penting.`
+`src/proxy.ts` mengarahkan URL tanpa prefix ke locale pilihan: cookie `locale`, lalu `Accept-Language`, lalu `id`. Toggle bahasa mengganti prefix URL dan menyimpan cookie.
 
 ## 5. Data model (Supabase)
 
