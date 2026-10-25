@@ -113,7 +113,7 @@ Library: **Motion** (`motion/react`). Gerak menjelaskan perubahan state atau men
 
 1. **Hero sweep.** Panoramik contoh di hero. Garis scan `--accent` menyapu kiri → kanan. Saat dilewati, kotak temuan digambar (stroke-dashoffset) dan callout mono muncul dengan leader line. Berulang pelan setiap 8 detik; berhenti saat tab tidak terlihat.
 2. **Lampu dimatikan.** Masuk ke hasil: latar terang menyusut menjadi gelap lewat `clip-path: circle()` yang berpusat di gambar.
-3. **Analisis nyata.** Selama `analyzing`, sweep berjalan di atas gambar milik pengguna, dan label langkah (`01 VALIDASI`, `02 DETEKSI`, `03 HEATMAP`) maju mengikuti tahap server yang sebenarnya.
+3. **Analisis nyata.** Selama `analyzing`, sweep berjalan di atas gambar milik pengguna, dan label langkah (`01 VALIDASI`, `02 DETEKSI & HEATMAP`) maju mengikuti tahap server yang sebenarnya. Deteksi dan heatmap satu panggilan ke API inferensi, jadi tidak dibuat dua langkah (keputusan pengguna 2026-10-25, #9).
 4. **Hover sinkron.** Hover item daftar temuan → kotak di viewer menebal dan kotak lain meredup (opacity 0,25). Berlaku dua arah.
 5. **Insight streaming.** Teks muncul per kalimat (bukan per karakter), kartu temuan masuk stagger 60 ms.
 

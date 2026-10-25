@@ -61,7 +61,7 @@ stateDiagram-v2
 ```
 
 - `waking` ditampilkan bila `/api/health` API belum menjawab "ready" dalam 3 detik. Copy: "Menyiapkan server, biasanya kurang dari 1 menit".
-- Langkah di layar `analyzing` mengikuti tahap nyata (validasi → deteksi → heatmap), bukan progress bar palsu.
+- Langkah di layar `analyzing` mengikuti tahap nyata dari event `POST /api/scans` ([architecture.md §4.1](architecture.md#41-route-handlers)): `01 VALIDASI` (Gemini) → `02 DETEKSI & HEATMAP` (satu panggilan ke API inferensi, jadi tidak dipisah), bukan progress bar palsu (keputusan pengguna 2026-10-25, #9).
 
 ## 4. Simpan hasil tamu (US-10)
 
