@@ -2,6 +2,8 @@ import base64
 import io
 
 import numpy as np
+import torch
+import torch.nn.functional as F
 from PIL import Image
 
 IMGSZ = 640
@@ -38,17 +40,15 @@ class GradCam:
         self._activation = None
         net.model[layer_index].register_forward_hook(self._keep)
 
-    def _keep(self, _module, _inputs, output) -> None:
-        self._activation = output
+    def _keep(self, _module, _inputs, output):
+        # Graph starts here: the backbone below runs without autograd bookkeeping.
+        self._activation = output.detach().requires_grad_(torch.is_grad_enabled())
+        return self._activation
 
     def __call__(self, rgb: np.ndarray, class_ids: list[int], conf: float = 0.25) -> dict[str, str]:
-        import torch
-        import torch.nn.functional as F
-
         image, region = letterbox(rgb)
         param = next(self.net.parameters())
         x = torch.from_numpy(image).permute(2, 0, 1)[None].to(param.device, param.dtype) / 255
-        x.requires_grad_(True)  # weights are frozen; this keeps the graph through the activations
         with torch.enable_grad():
             probs = self.net(x)[0][0, 4:]  # (classes, anchors), already sigmoid
             activation = self._activation
