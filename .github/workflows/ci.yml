@@ -76,7 +76,7 @@ jobs:
   model-smoke-test:
     name: Model Smoke Test
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: api
@@ -104,6 +104,26 @@ jobs:
         run: pip install -r requirements.txt -r requirements-dev.txt --extra-index-url https://download.pytorch.org/whl/cpu
       - name: Inference with real checkpoint
         run: pytest -m smoke
+      # Same image HF Spaces builds; the container downloads the checkpoint itself on start.
+      - name: Build Space image
+        run: docker build -t dentavision-api .
+      - name: Analyze through the container
+        run: |
+          docker run -d --name api -p 7860:7860 -e API_SECRET=ci-container-secret dentavision-api
+          # Up to 5 min for the checkpoint download + load; the server is not up for the first polls.
+          for _ in $(seq 60); do
+            status=$(curl -fs localhost:7860/health 2>/dev/null | python -c "import json,sys; print(json.load(sys.stdin)['status'])" 2>/dev/null || true)
+            [ "$status" = ready ] && break
+            if [ "$status" = error ]; then echo "::error::Model failed to load in the container (status=error)"; exit 1; fi
+            sleep 5
+          done
+          if [ "$status" != ready ]; then echo "::error::Container not ready after 5 minutes (last status: ${status:-no response})"; exit 1; fi
+          python -c "import sys; sys.path.insert(0, 'tests/smoke'); from test_checkpoint import teeth; from PIL import Image; Image.fromarray(teeth()).save('teeth.png')"
+          curl -fsS -H "X-API-Secret: ci-container-secret" -F image=@teeth.png localhost:7860/v1/analyze -o result.json
+          python -c "import json; r = json.load(open('result.json')); assert r['detections'] and r['heatmaps'], r; print(len(r['detections']), 'detections', sorted(r['heatmaps']), r['timing_ms'])"
+      - name: Container logs
+        if: failure()
+        run: docker logs api || true
 
   database-quality-gate:
     name: Database pgTAP & RLS Tests
