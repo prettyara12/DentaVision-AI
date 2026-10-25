@@ -123,7 +123,7 @@ Hasil spike M1 (2026-10-25, #7): pada 5 panoramik contoh, heatmap P3 jatuh di da
 | `GET` | `/api/samples/[key]` | Hasil contoh (cache statis, tanpa kuota). `key` = `impacted`, `restorations`, `missing`. 200 = hasil `/v1/analyze` yang dihitung sekali dengan API lokal (`web/src/features/scan/samples/*.json`), di-prerender saat build; 404 `not_found` untuk key lain. Gambarnya file statis `web/public/samples/{key}.jpg` (+ `-thumb.jpg`), sisi terpanjang 2048 px seperti upload. Tanpa validasi Gemini dan tanpa panggilan inferensi |
 | `POST` | `/api/scans/import` | Simpan hasil tamu (US-10) |
 | `DELETE` | `/api/scans/[id]` | Hapus scan + file Storage + chat terkait |
-| `POST` | `/api/insight` | Stream insight untuk daftar temuan; bila `scan_id` ada, simpan hasil akhir |
+| `POST` | `/api/insight` | Stream insight untuk daftar temuan; bila `scan_id` ada, simpan hasil akhir (M4). Body JSON `{ locale, detections }` (≤ 64 KB, ≤ 500 deteksi, skema sama dengan `/v1/analyze`), tanpa gambar. Respons NDJSON: `{type:"partial", insight}` berulang (JSON parsial dari stream Gemini, kartu hanya untuk `class_key` yang ada di konteks, urutan dari kode), lalu `{type:"done", insight}` (tervalidasi Zod) atau `{type:"error"}`. Error request: 411, 413, 400 `invalid_request` |
 | `POST` | `/api/chat` | Stream jawaban chat (per scan / umum) |
 | `DELETE` | `/api/chats/[id]` | Hapus chat |
 | `DELETE` | `/api/account` | Hapus akun + semua data |

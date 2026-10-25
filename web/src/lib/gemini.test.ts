@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const generateContent = vi.hoisted(() => vi.fn());
+const generateContentStream = vi.hoisted(() => vi.fn());
 
 vi.mock("@google/genai", () => {
   class ApiError extends Error {
@@ -9,7 +10,7 @@ vi.mock("@google/genai", () => {
     }
   }
   class GoogleGenAI {
-    models = { generateContent };
+    models = { generateContent, generateContentStream };
   }
   return { ApiError, GoogleGenAI };
 });
@@ -19,13 +20,16 @@ vi.mock("@/lib/env", () => ({
 }));
 
 const { ApiError } = await import("@google/genai");
-const { isRejected, validateXray } = await import("./gemini");
+const apiError = (status: number) => new (ApiError as unknown as new (s: number) => Error)(status);
+const { InsightUnavailableError, isRejected, streamInsight, validateXray } =
+  await import("./gemini");
 
 const image = new Uint8Array([0xff, 0xd8, 0xff]);
 const reply = (verdict: object) => ({ text: JSON.stringify(verdict) });
 
 beforeEach(() => {
   generateContent.mockReset();
+  generateContentStream.mockReset();
 });
 
 describe("validateXray", () => {
@@ -81,5 +85,48 @@ describe("isRejected", () => {
     expect(isRejected({ is_dental_panoramic: false, confidence: 0.6, reason: "" })).toBe(true);
     expect(isRejected({ is_dental_panoramic: false, confidence: 0.59, reason: "" })).toBe(false);
     expect(isRejected({ is_dental_panoramic: true, confidence: 1, reason: "" })).toBe(false);
+  });
+});
+
+describe("streamInsight", () => {
+  async function* chunks(...texts: string[]) {
+    for (const text of texts) yield { text };
+  }
+  const collect = async (signal = new AbortController().signal) => {
+    const seen: string[] = [];
+    for await (const text of streamInsight("Findings: ...", "en", signal)) seen.push(text);
+    return seen;
+  };
+
+  it("sends the findings as the user turn and yields the accumulated text", async () => {
+    generateContentStream.mockResolvedValue(chunks('{"summary"', ': "Hi."}'));
+    expect(await collect()).toEqual(['{"summary"', '{"summary": "Hi."}']);
+    const [params] = generateContentStream.mock.calls[0] as [
+      { model: string; contents: unknown; config: { systemInstruction: string } },
+    ];
+    expect(params.model).toBe("primary");
+    expect(params.contents).toEqual([{ role: "user", parts: [{ text: "Findings: ..." }] }]);
+    expect(params.config.systemInstruction).toContain("to a layperson in English");
+  });
+
+  it("falls back to the backup model only on a 429 before any text", async () => {
+    generateContentStream.mockRejectedValueOnce(apiError(429)).mockResolvedValueOnce(chunks("{}"));
+    expect(await collect()).toEqual(["{}"]);
+    expect(generateContentStream.mock.calls.map(([p]) => (p as { model: string }).model)).toEqual([
+      "primary",
+      "backup",
+    ]);
+  });
+
+  it("fails without retrying on other errors or a cut-off stream", async () => {
+    generateContentStream.mockRejectedValueOnce(apiError(500));
+    await expect(collect()).rejects.toBeInstanceOf(InsightUnavailableError);
+    async function* broken() {
+      yield { text: '{"summary": "x' };
+      throw apiError(429);
+    }
+    generateContentStream.mockResolvedValueOnce(broken());
+    await expect(collect()).rejects.toBeInstanceOf(InsightUnavailableError);
+    expect(generateContentStream).toHaveBeenCalledTimes(2);
   });
 });

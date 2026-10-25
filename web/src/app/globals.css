@@ -90,9 +90,24 @@ body {
   animation: scan-sweep 1600ms linear infinite;
 }
 
+/* Insight cards enter one after another, 60 ms apart (design-system §4, `quick`). */
+@keyframes insight-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.insight-rise {
+  animation: insight-rise 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .scan-sweep {
     display: none;
+  }
+  .insight-rise {
+    animation: none;
   }
 }
 

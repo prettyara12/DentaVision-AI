@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { insightSchema } from "@/features/insight/insight";
+import { locales } from "@/lib/i18n";
 
 // Contract of api/ POST /v1/analyze (docs/architecture.md §3.1). Checked at the web server boundary.
 export const analyzeResultSchema = z.object({
@@ -35,6 +37,10 @@ export const storedScanSchema = z.object({
   result: analyzeResultSchema,
   /** Set for "Coba contoh" scans so the result page can credit the image. */
   sample: z.string().optional(),
+  /** Last finished insight for this scan, so a reload does not call Gemini again. */
+  insight: z
+    .object({ locale: z.enum(locales), version: z.string(), data: insightSchema })
+    .optional(),
 });
 
 export type StoredScan = z.infer<typeof storedScanSchema>;

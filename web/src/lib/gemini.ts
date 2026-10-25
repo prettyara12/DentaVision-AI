@@ -2,12 +2,14 @@ import "server-only";
 import { ApiError, GoogleGenAI } from "@google/genai";
 import { z } from "zod";
 import { env } from "@/lib/env";
+import { insightSchema } from "@/features/insight/insight";
 import type { Locale } from "@/lib/i18n";
 
 // Prompts and schemas: docs/ai-design.md. Bump the version when a prompt changes.
 export const VALIDATE_PROMPT_VERSION = "validate@1";
 
 const VALIDATE_TIMEOUT_MS = 8_000;
+const INSIGHT_TIMEOUT_MS = 45_000;
 const REJECT_MIN_CONFIDENCE = 0.6;
 
 const languageName: Record<Locale, string> = { id: "Indonesian", en: "English" };
@@ -71,4 +73,65 @@ export async function validateXray(
     }
   }
   return null;
+}
+
+const insightPrompt = (locale: Locale) =>
+  [
+    `You explain dental panoramic X-ray findings to a layperson in ${languageName[locale]}.`,
+    "You get a list of findings from an AI detector, not from a dentist.",
+    "Rules:",
+    "- Use plain words. Explain any dental term in the same sentence.",
+    '- Say "the AI marked" or "may indicate". Never say the person has a disease.',
+    "- Do not mention tooth numbers. Use only the areas given.",
+    "- Do not give medication, dosage, or treatment plans.",
+    "- If there are no attention findings, the summary must say both: the AI did not mark anything",
+    "  that needs attention, and the detector often misses findings, so routine dental checkups still matter.",
+    "- No greetings, no filler, no emojis. No disclaimer: the app shows its own.",
+    "- findings: one entry per attention or treatment class, class_key copied from the list.",
+    "Return JSON matching the schema.",
+  ].join("\n");
+
+const insightJsonSchema = z.toJSONSchema(insightSchema);
+
+export class InsightUnavailableError extends Error {}
+
+/**
+ * Streams the insight JSON for a text-only findings context (docs/ai-design.md §3), yielding the
+ * text received so far. Falls back to the backup model on a 429 before any text arrived.
+ */
+export async function* streamInsight(
+  context: string,
+  locale: Locale,
+  signal: AbortSignal,
+): AsyncGenerator<string> {
+  const { GEMINI_API_KEY, GEMINI_MODEL, GEMINI_FALLBACK_MODEL } = env();
+  client ??= new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+  const abortSignal = AbortSignal.any([signal, AbortSignal.timeout(INSIGHT_TIMEOUT_MS)]);
+
+  for (const model of [GEMINI_MODEL, GEMINI_FALLBACK_MODEL].filter(Boolean) as string[]) {
+    let text = "";
+    try {
+      const stream = await client.models.generateContentStream({
+        model,
+        // Findings are data built by our code; they go in as the user turn, never into the system prompt.
+        contents: [{ role: "user", parts: [{ text: context }] }],
+        config: {
+          systemInstruction: insightPrompt(locale),
+          responseMimeType: "application/json",
+          responseJsonSchema: insightJsonSchema,
+          temperature: 0.3,
+          abortSignal,
+        },
+      });
+      for await (const chunk of stream) {
+        text += chunk.text ?? "";
+        yield text;
+      }
+      return;
+    } catch (error) {
+      if (!text && error instanceof ApiError && error.status === 429) continue;
+      throw new InsightUnavailableError("insight stream failed", { cause: error });
+    }
+  }
+  throw new InsightUnavailableError("all models rate limited");
 }
