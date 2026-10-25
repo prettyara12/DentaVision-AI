@@ -5,11 +5,15 @@ from typing import Protocol
 
 import numpy as np
 
+from app.gradcam import GradCam
+
 
 class Detector(Protocol):
     version: str
 
     def detect(self, rgb: np.ndarray) -> list[dict]: ...
+
+    def heatmaps(self, rgb: np.ndarray, class_ids: list[int]) -> dict[str, str]: ...
 
 
 def checkpoint_path() -> Path:
@@ -34,6 +38,9 @@ class YoloDetector:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         digest = hashlib.sha256(path.read_bytes()).hexdigest()[:8]
         self.version = f"yolov8m-resnet50@{digest}"
+        net = self.model.model
+        # P3 (first Detect input, stride 8) localises far better than SPPF; see architecture §3.3.
+        self.gradcam = GradCam(net, net.model[-1].f[0])
 
     def detect(self, rgb: np.ndarray) -> list[dict]:
         # Ultralytics treats numpy input as BGR.
@@ -50,3 +57,6 @@ class YoloDetector:
             }
             for i, (c, p) in enumerate(zip(boxes.cls.tolist(), boxes.conf.tolist(), strict=True))
         ]
+
+    def heatmaps(self, rgb: np.ndarray, class_ids: list[int]) -> dict[str, str]:
+        return self.gradcam(rgb, class_ids)

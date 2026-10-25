@@ -20,5 +20,5 @@ Setiap milestone berakhir dengan sesuatu yang bisa di-demo. Fitur `F*` dan story
 | Sumber + lisensi dataset dan gambar contoh | M2 selesai | Pemilik repo |
 | Akses split validasi untuk metrik per kelas | M5 (halaman Tentang model) | Pemilik repo |
 | `GEMINI_FALLBACK_MODEL` | M3 | Agent, verifikasi dokumentasi resmi |
-| Layer Grad-CAM final (SPPF / P3) | M1 | Agent, berdasarkan spike |
+| ~~Layer Grad-CAM final (SPPF / P3)~~ ✅ 2026-10-25: P3 (input pertama `Detect`), lihat [architecture §3.3](architecture.md#33-grad-cam-per-kelas) (#7) | M1 | Agent, berdasarkan spike |
 | Review penjelasan 31 kelas | M2 selesai | Pemilik repo |

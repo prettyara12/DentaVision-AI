@@ -73,3 +73,22 @@ def test_detector_wrapper_returns_normalized_detections() -> None:
         assert set(d) == {"class_id", "confidence", "box"}
         assert 0 <= d["class_id"] < 31 and 0.10 <= d["confidence"] <= 1
         assert len(d["box"]) == 4 and all(0 <= v <= 1 for v in d["box"])
+
+
+def test_gradcam_returns_one_grayscale_png_per_class() -> None:
+    import base64
+    import io
+
+    from PIL import Image
+
+    detector = YoloDetector(checkpoint_path())
+    rng = np.random.default_rng(0)
+    image = rng.integers(40, 160, size=(512, 1024, 3), dtype=np.uint8)
+    # Classes without any confident anchor still get a heatmap (strongest-anchor fallback).
+    heatmaps = detector.heatmaps(image, [0, 7])
+    assert set(heatmaps) == {"0", "7"}
+    for b64 in heatmaps.values():
+        png = Image.open(io.BytesIO(base64.b64decode(b64)))
+        assert png.mode == "L" and png.size == (256, 128)
+    # Grad-CAM must not leave the network in grad mode for later predictions.
+    assert all(not p.requires_grad for p in detector.model.model.parameters())

@@ -19,11 +19,16 @@ class FakeDetector:
     def __init__(self, detections: list[dict]) -> None:
         self.detections = detections
         self.calls = 0
+        self.heatmap_classes: list[int] | None = None
 
     def detect(self, rgb: np.ndarray) -> list[dict]:
         self.calls += 1
         assert rgb.ndim == 3 and rgb.shape[2] == 3
         return self.detections
+
+    def heatmaps(self, rgb: np.ndarray, class_ids: list[int]) -> dict[str, str]:
+        self.heatmap_classes = class_ids
+        return {str(c): f"png-{c}" for c in class_ids}
 
 
 def png(width: int = 1024, height: int = 512, color=(90, 90, 90)) -> bytes:
@@ -169,8 +174,25 @@ def test_returns_contract(client) -> None:
     assert body["image"] == {"width": 1024, "height": 512}
     assert body["low_quality"] is False
     assert body["detections"] == [TOOTH, CARIES]
+    assert body["heatmaps"] == {"0": "png-0", "15": "png-15"}
+    assert set(body["timing_ms"]) == {"prefilter", "detect", "gradcam"}
+
+
+def test_heatmaps_only_for_classes_at_or_above_threshold(client) -> None:
+    weak = {"class_id": 7, "confidence": 0.249, "box": [0.1, 0.1, 0.2, 0.2]}
+    edge = {"class_id": 3, "confidence": 0.25, "box": [0.3, 0.3, 0.4, 0.4]}
+    detector = ready([CARIES, weak, edge, {**CARIES, "confidence": 0.3}])
+    body = post(client, png()).json()
+    assert detector.heatmap_classes == [0, 3]  # sorted, deduplicated, 0.25 inclusive
+    assert set(body["heatmaps"]) == {"0", "3"}
+    assert len(body["detections"]) == 4  # weak boxes are still returned
+
+
+def test_no_gradcam_when_nothing_reaches_threshold(client) -> None:
+    detector = ready([{"class_id": 7, "confidence": 0.12, "box": [0.1, 0.1, 0.2, 0.2]}])
+    body = post(client, png()).json()
+    assert detector.heatmap_classes is None
     assert body["heatmaps"] == {}
-    assert set(body["timing_ms"]) == {"prefilter", "detect"}
 
 
 def test_narrow_image_is_low_quality(client) -> None:
