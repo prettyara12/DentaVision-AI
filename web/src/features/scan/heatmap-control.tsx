@@ -1,5 +1,6 @@
 "use client";
 
+import { Select } from "@/components/ui/select";
 import { t, type Locale } from "@/lib/i18n";
 import { classCatalog } from "./class-catalog";
 import { formatConfidence } from "./finding-list";
@@ -22,21 +23,24 @@ export function HeatmapControl({ lang, classIds, value, onChange, opacity, onOpa
 
   return (
     <div className="flex flex-col gap-3">
-      <label className="flex flex-col gap-2">
-        <span className={label}>{t(lang, "heatmap.label")}</span>
-        <select
-          value={value ?? ""}
-          onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
-          className="min-h-11 rounded-sm border border-rule bg-surface px-3 text-sm text-ink"
-        >
-          <option value="">{t(lang, "heatmap.off")}</option>
-          {classIds.map((id) => (
-            <option key={id} value={id}>
-              {classCatalog[id]?.name[lang]}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="flex flex-col gap-2">
+        <label htmlFor="heatmap-class" className={label}>
+          {t(lang, "heatmap.label")}
+        </label>
+        {/* Radix forbids an empty item value, so "off" stands for no heatmap. */}
+        <Select
+          id="heatmap-class"
+          value={value === null ? "off" : String(value)}
+          onValueChange={(v) => onChange(v === "off" ? null : Number(v))}
+          options={[
+            { value: "off", label: t(lang, "heatmap.off") },
+            ...classIds.map((id) => ({
+              value: String(id),
+              label: classCatalog[id]?.name[lang] ?? "",
+            })),
+          ]}
+        />
+      </div>
       {name && (
         <>
           <label className="flex flex-col gap-2">
