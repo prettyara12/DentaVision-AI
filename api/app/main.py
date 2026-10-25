@@ -20,6 +20,7 @@ QUEUE_TIMEOUT_S = 60
 # Image limit plus room for multipart boundaries and headers.
 MAX_BODY_BYTES = MAX_BYTES + 64 * 1024
 LOW_QUALITY_WIDTH = 800
+HEATMAP_MIN_CONF = 0.25  # same default threshold the UI filters on (PRD §7)
 
 state: dict = {"status": "loading", "model_version": None, "detector": None}
 _lock = asyncio.Lock()
@@ -102,6 +103,12 @@ async def analyze(image: UploadFile):
         started = time.perf_counter()
         detections = await run_in_threadpool(detector.detect, rgb)
         detect_ms = round((time.perf_counter() - started) * 1000)
+        class_ids = sorted(
+            {d["class_id"] for d in detections if d["confidence"] >= HEATMAP_MIN_CONF}
+        )
+        started = time.perf_counter()
+        heatmaps = await run_in_threadpool(detector.heatmaps, rgb, class_ids) if class_ids else {}
+        gradcam_ms = round((time.perf_counter() - started) * 1000)
     finally:
         _lock.release()
 
@@ -111,6 +118,6 @@ async def analyze(image: UploadFile):
         "image": {"width": width, "height": height},
         "low_quality": width < LOW_QUALITY_WIDTH,
         "detections": detections,
-        "heatmaps": {},  # Grad-CAM per class lands in #7.
-        "timing_ms": {"prefilter": prefilter_ms, "detect": detect_ms},
+        "heatmaps": heatmaps,
+        "timing_ms": {"prefilter": prefilter_ms, "detect": detect_ms, "gradcam": gradcam_ms},
     }
