@@ -138,6 +138,7 @@ Basis shadcn/ui (Radix + Lucide), semua di-restyle dengan tokens. Tampilan defau
 | `Dropzone` | Area drop + tombol pilih file + "Coba contoh" + toggle "Jangan simpan" (login) | idle, dragover, invalid, preparing |
 | `ScanProgress` | Sweep + langkah bernomor mengikuti tahap server | waking, analyzing, rejected, error |
 | `Disclaimer` | 1 kalimat + tautan Tentang model | inline, footer |
+| `Select` | Dropdown tunggal untuk semua pilihan (`web/src/components/ui/select.tsx`, Radix Select). Daftar selebar pemicu dan dibatasi ruang viewport, jadi tidak melewati layar 360 px. Jangan pakai `<select>` native | closed, open, highlighted, checked |
 | `QuotaNotice` | Sisa kuota / waktu reset / ajakan login | warn, exceeded |
 
 ## 6. Layout responsif

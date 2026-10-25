@@ -6,6 +6,8 @@ import { t, type Locale } from "@/lib/i18n";
 import { GROUPS, groupInfo, type FindingGroup } from "./class-catalog";
 import { FindingFilters, FindingList } from "./finding-list";
 import { groupFindings } from "./findings";
+import { DEFAULT_HEATMAP_OPACITY } from "./heatmap";
+import { HeatmapControl } from "./heatmap-control";
 import {
   DEFAULT_MIN_CONFIDENCE,
   SCAN_STORAGE_KEY,
@@ -62,6 +64,8 @@ function Workspace({ lang, scan }: { lang: Locale; scan: StoredScan }) {
       >,
   );
   const [activeClass, setActiveClass] = useState<number | null>(null);
+  const [chosenHeatmap, setChosenHeatmap] = useState<number | null>(null);
+  const [heatmapOpacity, setHeatmapOpacity] = useState(DEFAULT_HEATMAP_OPACITY);
 
   const groups = useMemo(
     () => groupFindings(scan.result.detections, minConfidence),
@@ -81,6 +85,12 @@ function Workspace({ lang, scan }: { lang: Locale; scan: StoredScan }) {
         })),
       ),
   );
+  // Heatmaps exist only for classes detected at >= 0.25 (docs/architecture.md §3.1), so offer those still listed.
+  const heatmapIds = groups.flatMap(({ classes }) =>
+    classes.map((c) => c.info.id).filter((id) => scan.result.heatmaps[String(id)]),
+  );
+  const heatmapClass =
+    chosenHeatmap !== null && heatmapIds.includes(chosenHeatmap) ? chosenHeatmap : null;
   const noAttention = groups[0]?.classes.length === 0;
 
   return (
@@ -94,6 +104,13 @@ function Workspace({ lang, scan }: { lang: Locale; scan: StoredScan }) {
           boxes={boxes}
           activeClass={activeClass}
           onHoverClass={setActiveClass}
+          heatmap={
+            heatmapClass === null ? null : (scan.result.heatmaps[String(heatmapClass)] ?? null)
+          }
+          heatmapOpacity={heatmapOpacity}
+          onToggleHeatmap={() =>
+            setChosenHeatmap(heatmapClass === null ? (heatmapIds[0] ?? null) : null)
+          }
         />
       </div>
       <section aria-labelledby="findings-title" className="flex flex-col gap-6 lg:col-span-4">
@@ -116,11 +133,22 @@ function Workspace({ lang, scan }: { lang: Locale; scan: StoredScan }) {
           visible={visible}
           onToggleGroup={(g) => setVisible((v) => ({ ...v, [g]: !v[g] }))}
         />
+        <HeatmapControl
+          lang={lang}
+          classIds={heatmapIds}
+          value={heatmapClass}
+          onChange={setChosenHeatmap}
+          opacity={heatmapOpacity}
+          onOpacity={setHeatmapOpacity}
+        />
         <FindingList
           lang={lang}
           groups={groups}
           activeClass={activeClass}
           onActiveClass={setActiveClass}
+          heatmapClasses={new Set(heatmapIds)}
+          heatmapClass={heatmapClass}
+          onHeatmapClass={setChosenHeatmap}
         />
         <Link href={`/${lang}/scan`} className="text-sm text-accent underline underline-offset-4">
           {t(lang, "result.new_scan")}

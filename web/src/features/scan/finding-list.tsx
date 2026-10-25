@@ -9,12 +9,24 @@ type ListProps = {
   groups: GroupFindings[];
   activeClass: number | null;
   onActiveClass: (classId: number | null) => void;
+  /** Classes that have a heatmap; clicking one of them toggles it on the image (US-04). */
+  heatmapClasses: ReadonlySet<number>;
+  heatmapClass: number | null;
+  onHeatmapClass: (classId: number | null) => void;
 };
 
 export const formatConfidence = (lang: Locale, value: number) =>
   value.toLocaleString(lang, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-export function FindingList({ lang, groups, activeClass, onActiveClass }: ListProps) {
+export function FindingList({
+  lang,
+  groups,
+  activeClass,
+  onActiveClass,
+  heatmapClasses,
+  heatmapClass,
+  onHeatmapClass,
+}: ListProps) {
   return (
     <div className="flex flex-col gap-4">
       {groups.map(({ group, classes }) => (
@@ -48,11 +60,13 @@ export function FindingList({ lang, groups, activeClass, onActiveClass }: ListPr
             <ul className="flex flex-col">
               {classes.map((c) => {
                 const conf = formatConfidence(lang, c.confidence);
+                const hasHeatmap = heatmapClasses.has(c.info.id);
                 return (
                   <li key={c.info.id}>
                     <button
                       type="button"
                       data-active={activeClass === c.info.id || undefined}
+                      aria-pressed={hasHeatmap ? heatmapClass === c.info.id : undefined}
                       aria-label={t(lang, "findings.item")
                         .replace("{name}", c.info.name[lang])
                         .replace("{conf}", conf)
@@ -61,12 +75,19 @@ export function FindingList({ lang, groups, activeClass, onActiveClass }: ListPr
                       onPointerLeave={(e) => e.pointerType === "mouse" && onActiveClass(null)}
                       onFocus={() => onActiveClass(c.info.id)}
                       onBlur={() => onActiveClass(null)}
-                      // Tap on touch: focus already fires, so click only re-asserts (no toggle that would undo it).
-                      onClick={() => onActiveClass(c.info.id)}
+                      // Tap on touch: focus already fires, so click re-asserts the highlight instead of toggling it.
+                      onClick={() => {
+                        onActiveClass(c.info.id);
+                        if (hasHeatmap)
+                          onHeatmapClass(heatmapClass === c.info.id ? null : c.info.id);
+                      }}
                       className="flex min-h-11 w-full items-center justify-between gap-3 rounded-sm px-2 text-left hover:bg-surface-2 data-active:bg-surface-2"
                     >
                       <span className="text-sm">{c.info.name[lang]}</span>
                       <span className="shrink-0 font-mono text-xs text-ink-2 tabular-nums">
+                        {heatmapClass === c.info.id && (
+                          <span className="mr-2 text-accent">{t(lang, "heatmap.badge")}</span>
+                        )}
                         {conf} ×{c.boxes.length}
                       </span>
                     </button>
