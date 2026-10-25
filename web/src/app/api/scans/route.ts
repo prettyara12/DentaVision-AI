@@ -21,9 +21,11 @@ const fail = (status: number, code: string) => Response.json({ code }, { status 
 
 export async function POST(request: Request) {
   // shortcut: no auth or quota yet, both land with #15/#18 (M4); guests are unlimited until then.
-  if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) {
-    return fail(413, "too_large");
-  }
+  // Without a valid Content-Length, formData() would buffer an unbounded body before any size
+  // check; browsers always send one for FormData, so require it (same rule as the API, 411).
+  const declared = request.headers.get("content-length");
+  if (!declared || !/^\d+$/.test(declared)) return fail(411, "length_required");
+  if (Number(declared) > MAX_BODY_BYTES) return fail(413, "too_large");
   const form = await request.formData().catch(() => null);
   const image = form?.get("image");
   const localeField = form?.get("locale");

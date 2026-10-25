@@ -38,4 +38,34 @@ describe("readLines", () => {
     for await (const line of readLines(body)) out.push(line);
     expect(out).toEqual([{ a: 1 }, { b: 2 }, { c: 3 }]);
   });
+
+  function trackedStream(chunks: string[]) {
+    const state = { cancelled: false };
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(new TextEncoder().encode(chunk));
+      },
+      cancel() {
+        state.cancelled = true;
+      },
+    });
+    return { body, state };
+  }
+
+  it("cancels the stream when the consumer stops early", async () => {
+    const { body, state } = trackedStream(['{"final":true}\n', '{"late":1}\n']);
+    for await (const line of readLines(body)) {
+      expect(line).toEqual({ final: true });
+      break;
+    }
+    expect(state.cancelled).toBe(true);
+  });
+
+  it("cancels the stream and rethrows on invalid JSON", async () => {
+    const { body, state } = trackedStream(["not json\n"]);
+    await expect(async () => {
+      for await (const _ of readLines(body)) void _;
+    }).rejects.toThrow(SyntaxError);
+    expect(state.cancelled).toBe(true);
+  });
 });

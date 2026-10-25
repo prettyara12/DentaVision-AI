@@ -52,12 +52,17 @@ export async function* readLines<T>(body: ReadableStream<Uint8Array>): AsyncGene
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  for (;;) {
-    const { value, done } = await reader.read();
-    buffer += decoder.decode(value, { stream: !done });
-    const lines = buffer.split("\n");
-    buffer = done ? "" : (lines.pop() ?? "");
-    for (const line of lines) if (line.trim()) yield JSON.parse(line) as T;
-    if (done) return;
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+      const lines = buffer.split("\n");
+      buffer = done ? "" : (lines.pop() ?? "");
+      for (const line of lines) if (line.trim()) yield JSON.parse(line) as T;
+      if (done) return;
+    }
+  } finally {
+    // Also runs on invalid JSON or when the consumer stops early; closes the connection.
+    await reader.cancel().catch(() => {});
   }
 }

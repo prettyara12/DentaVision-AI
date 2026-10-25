@@ -24,11 +24,26 @@ const RESULT = {
   timing_ms: { prefilter: 1, detect: 1, gradcam: 0 },
 };
 
-function upload(bytes: Uint8Array<ArrayBuffer>, locale = "en") {
+// Like a browser: a FormData upload carries Content-Length (a bare `new Request` does not set it).
+async function multipart(body: FormData, headers: Record<string, string> = {}) {
+  const encoded = new Response(body);
+  const bytes = await encoded.arrayBuffer();
+  return new Request("http://web.test/api/scans", {
+    method: "POST",
+    body: bytes,
+    headers: {
+      "content-type": encoded.headers.get("content-type")!,
+      "content-length": String(bytes.byteLength),
+      ...headers,
+    },
+  });
+}
+
+function upload(bytes: Uint8Array<ArrayBuffer>, locale = "en", headers?: Record<string, string>) {
   const body = new FormData();
   body.append("image", new Blob([bytes], { type: "image/jpeg" }), "scan.jpg");
   body.append("locale", locale);
-  return new Request("http://web.test/api/scans", { method: "POST", body });
+  return multipart(body, headers);
 }
 
 async function events(response: Response): Promise<ScanEvent[]> {
@@ -44,7 +59,7 @@ beforeEach(() => {
 
 describe("POST /api/scans", () => {
   it("rejects bytes that are not JPEG or PNG before calling any provider", async () => {
-    const response = await POST(upload(new TextEncoder().encode("GIF89a....")));
+    const response = await POST(await upload(new TextEncoder().encode("GIF89a....")));
     expect(response.status).toBe(415);
     expect(await response.json()).toEqual({ code: "unsupported_type" });
     expect(validateXray).not.toHaveBeenCalled();
@@ -53,7 +68,7 @@ describe("POST /api/scans", () => {
   it("rejects an upload over 4 MB", async () => {
     const big = new Uint8Array(4 * 1024 * 1024 + 1);
     big.set(JPEG);
-    const response = await POST(upload(big));
+    const response = await POST(await upload(big));
     expect(response.status).toBe(413);
     expect(validateXray).not.toHaveBeenCalled();
   });
@@ -70,14 +85,37 @@ describe("POST /api/scans", () => {
   it("returns 400 without an image field", async () => {
     const body = new FormData();
     body.append("locale", "id");
-    const response = await POST(new Request("http://web.test/api/scans", { method: "POST", body }));
+    const response = await POST(await multipart(body));
     expect(response.status).toBe(400);
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["not a number", "abc"],
+    ["negative", "-1"],
+  ])("requires a Content-Length before parsing the body (%s)", async (_, value) => {
+    const body = new ReadableStream<Uint8Array>({
+      pull: () => expect.unreachable("body was read"),
+    });
+    const request = new Request("http://web.test/api/scans", {
+      method: "POST",
+      body,
+      headers: {
+        "content-type": "multipart/form-data; boundary=x",
+        ...(value ? { "content-length": value } : {}),
+      },
+      duplex: "half",
+    } as RequestInit);
+    const response = await POST(request);
+    expect(response.status).toBe(411);
+    expect(await response.json()).toEqual({ code: "length_required" });
+    expect(validateXray).not.toHaveBeenCalled();
   });
 
   it("streams validating → analyzing → result", async () => {
     validateXray.mockResolvedValue({ is_dental_panoramic: true, confidence: 0.95, reason: "OPG" });
     analyzeImage.mockResolvedValue({ kind: "result", result: RESULT });
-    const response = await POST(upload(JPEG, "id"));
+    const response = await POST(await upload(JPEG, "id"));
     expect(response.headers.get("content-type")).toContain("application/x-ndjson");
     expect(await events(response)).toEqual([
       { type: "stage", stage: "validating" },
@@ -93,7 +131,7 @@ describe("POST /api/scans", () => {
       confidence: 0.9,
       reason: "Selfie",
     });
-    expect(await events(await POST(upload(JPEG)))).toEqual([
+    expect(await events(await POST(await upload(JPEG)))).toEqual([
       { type: "stage", stage: "validating" },
       { type: "rejected", reason: "Selfie" },
     ]);
@@ -103,7 +141,7 @@ describe("POST /api/scans", () => {
   it("continues without Gemini and uses the API pre-filter as the fallback check", async () => {
     validateXray.mockResolvedValue(null);
     analyzeImage.mockResolvedValue({ kind: "not_xray" });
-    expect((await events(await POST(upload(JPEG)))).at(-1)).toEqual({
+    expect((await events(await POST(await upload(JPEG)))).at(-1)).toEqual({
       type: "rejected",
       reason: null,
     });
@@ -112,20 +150,20 @@ describe("POST /api/scans", () => {
   it("does not reject an unsure 'not panoramic'", async () => {
     validateXray.mockResolvedValue({ is_dental_panoramic: false, confidence: 0.4, reason: "?" });
     analyzeImage.mockResolvedValue({ kind: "result", result: RESULT });
-    expect((await events(await POST(upload(JPEG)))).at(-1)?.type).toBe("result");
+    expect((await events(await POST(await upload(JPEG)))).at(-1)?.type).toBe("result");
   });
 
   it("reports inference errors and unexpected failures as events", async () => {
     validateXray.mockResolvedValue(null);
     analyzeImage.mockResolvedValue({ kind: "error", code: "busy" });
-    expect((await events(await POST(upload(JPEG)))).at(-1)).toEqual({
+    expect((await events(await POST(await upload(JPEG)))).at(-1)).toEqual({
       type: "error",
       code: "busy",
     });
 
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     analyzeImage.mockRejectedValue(new Error("boom"));
-    expect((await events(await POST(upload(JPEG)))).at(-1)).toEqual({
+    expect((await events(await POST(await upload(JPEG)))).at(-1)).toEqual({
       type: "error",
       code: "unavailable",
     });
@@ -135,7 +173,7 @@ describe("POST /api/scans", () => {
   it("falls back to Indonesian for an unknown locale", async () => {
     validateXray.mockResolvedValue(null);
     analyzeImage.mockResolvedValue({ kind: "result", result: RESULT });
-    await events(await POST(upload(JPEG, "fr")));
+    await events(await POST(await upload(JPEG, "fr")));
     expect(validateXray).toHaveBeenCalledWith(expect.any(Uint8Array), "image/jpeg", "id");
   });
 });

@@ -133,7 +133,7 @@ Setiap handler: autentikasi (opsional untuk tamu) → otorisasi kepemilikan → 
 
 **`POST /api/scans`**, `multipart/form-data` dengan `image` (JPEG/PNG terkompres) dan `locale` (`id`/`en`, default `id`).
 
-- Ditolak sebelum stream dimulai, dengan JSON `{ "code": ... }`: `400 invalid_request` (tanpa `image`), `413 too_large` (body/gambar > 4 MB), `415 unsupported_type` (magic bytes bukan JPEG/PNG). Dimensi diperiksa API inferensi (≤ 25 M piksel).
+- Ditolak sebelum stream dimulai, dengan JSON `{ "code": ... }`: `411 length_required` (tanpa `Content-Length` yang valid, ditolak sebelum body dibaca), `400 invalid_request` (tanpa `image`), `413 too_large` (body/gambar > 4 MB), `415 unsupported_type` (magic bytes bukan JPEG/PNG). Dimensi diperiksa API inferensi (≤ 25 M piksel).
 - Selain itu respons `200` `application/x-ndjson`, satu objek per baris, sesuai urutan tahap di server:
 
   ```json
