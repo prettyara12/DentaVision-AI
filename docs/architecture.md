@@ -105,6 +105,13 @@ Hasil spike M1 (2026-10-25, #7): pada 5 panoramik contoh, heatmap P3 jatuh di da
 
 - HF Space tipe Docker, `api/Dockerfile`, port 7860. Secret Space: `API_SECRET` (`HF_TOKEN` hanya bila model repo dijadikan privat).
 - Torch versi CPU (`--index-url https://download.pytorch.org/whl/cpu`) supaya image kecil.
+- Image: `python:3.13-slim` + `libgl1`/`libglib2.0-0` (dibutuhkan `opencv-python` dari ultralytics), user UID 1000 sesuai aturan Spaces, 1 worker uvicorn. `HF_MODEL_REPO`/`HF_MODEL_FILE` punya default di Dockerfile. Checkpoint diunduh saat start (tidak ikut image), jadi `/health` = `loading` sampai model siap.
+- Metadata Space (`sdk: docker`, `app_port: 7860`) ada di front matter `api/README.md`. Isi folder `api/` adalah root repo Space.
+- CI job `Model Smoke Test` mem-build image yang sama, menjalankannya, menunggu `/health` = `ready`, lalu memanggil `/v1/analyze` dengan gambar sintetis.
+- Deploy dijalankan pengguna (butuh token HF dengan akses tulis, jangan dibagikan):
+  1. Buat Space Docker (hardware CPU basic) di akun HF pengguna, lalu isi secret `API_SECRET` di Settings.
+  2. `hf auth login`, lalu dari folder `api/`: `hf upload <owner>/<space> . . --repo-type space --include "Dockerfile" --include ".dockerignore" --include "README.md" --include "requirements.txt" --include "app/*.py"`. `--include` mencegah `.env` dan file lokal lain ikut ter-upload.
+  3. Tunggu build selesai, cek `https://<owner>-<space>.hf.space/health` → `ready`, lalu `curl` sebuah gambar ke `/v1/analyze` dengan header `X-API-Secret`.
 
 ## 4. Web (`web/`)
 
