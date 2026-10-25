@@ -128,7 +128,7 @@ Basis shadcn/ui (Radix + Lucide), semua di-restyle dengan tokens. Tampilan defau
 
 | Komponen | Isi | State |
 |---|---|---|
-| `XrayViewer` | Gambar + layer kotak (SVG) + layer heatmap (canvas); zoom/pan/pinch | loading, ready, heatmap on/off |
+| `XrayViewer` | Gambar + layer kotak (elemen HTML diposisikan di ruang layar agar garis dan label tetap tajam saat zoom) + layer heatmap (canvas); zoom/pan/pinch | loading, ready, heatmap on/off |
 | `FindingBox` | Kotak 2 px warna kelompok + callout mono `LABEL · 0.00` | default, hover, dimmed, hidden |
 | `FindingList` | Daftar dikelompokkan, header kelompok + jumlah, item = nama + confidence + jumlah kotak | collapsed (anatomy default), empty |
 | `HeatmapControl` | Pilih kelas + slider opacity + 1 kalimat cara membaca | off, on(class) |
