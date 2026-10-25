@@ -14,6 +14,7 @@ import {
   storedScanSchema,
   type StoredScan,
 } from "./result";
+import { findSample } from "./samples";
 import { XrayViewer, type ViewerBox } from "./xray-viewer";
 
 const noSubscribe = () => () => {};
@@ -91,6 +92,7 @@ function Workspace({ lang, scan }: { lang: Locale; scan: StoredScan }) {
   );
   const heatmapClass =
     chosenHeatmap !== null && heatmapIds.includes(chosenHeatmap) ? chosenHeatmap : null;
+  const sample = scan.sample ? findSample(scan.sample) : undefined;
   const noAttention = groups[0]?.classes.length === 0;
 
   return (
@@ -150,6 +152,19 @@ function Workspace({ lang, scan }: { lang: Locale; scan: StoredScan }) {
           heatmapClass={heatmapClass}
           onHeatmapClass={setChosenHeatmap}
         />
+        {sample && (
+          <p className="text-xs text-ink-2">
+            {t(lang, "sample.credit").split("{credit}")[0]}
+            <a href={sample.source} className="underline underline-offset-2">
+              {sample.credit}
+            </a>
+            {t(lang, "sample.credit").split("{credit}")[1]}{" "}
+            <a href={sample.license.url} className="underline underline-offset-2">
+              {sample.license.name}
+            </a>
+            .
+          </p>
+        )}
         <Link href={`/${lang}/scan`} className="text-sm text-accent underline underline-offset-4">
           {t(lang, "result.new_scan")}
         </Link>

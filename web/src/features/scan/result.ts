@@ -30,7 +30,12 @@ export type ScanEvent =
 // Guest results live only in this tab (docs/user-flows.md §2).
 export const SCAN_STORAGE_KEY = "dentavision:scan";
 
-export const storedScanSchema = z.object({ image: z.string(), result: analyzeResultSchema });
+export const storedScanSchema = z.object({
+  image: z.string(),
+  result: analyzeResultSchema,
+  /** Set for "Coba contoh" scans so the result page can credit the image. */
+  sample: z.string().optional(),
+});
 
 export type StoredScan = z.infer<typeof storedScanSchema>;
 

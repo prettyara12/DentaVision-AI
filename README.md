@@ -10,7 +10,7 @@ Upload X-ray panoramik gigi, lalu lihat apa yang ditandai AI: 31 jenis temuan de
 |---|---|
 | M0 Fondasi (docs, skeleton, CI 4 job) | Selesai |
 | M1 API inferensi (`/v1/analyze`, Grad-CAM P3, Dockerfile HF Space) | Selesai. Deploy Space dilakukan manual ([architecture §3.4](docs/architecture.md#34-deploy)) |
-| M2 Web scan & hasil | Berjalan: upload + `/api/scans` + validasi Gemini (#9). Viewer, heatmap, contoh menyusul (#10–#12) |
+| M2 Web scan & hasil | Berjalan: upload + validasi Gemini (#9), viewer & daftar temuan (#10), heatmap (#11), gambar contoh (#12). Menunggu review penjelasan 31 kelas oleh pemilik repo |
 | M3–M5 | Belum dimulai ([roadmap](docs/roadmap.md)) |
 
 Belum ada deploy production.
@@ -197,6 +197,15 @@ docs/       PRD, arsitektur, desain, dan dokumen lain (tabel di bawah)
 ## Kontribusi
 
 `main` ← `development` ← `feat/*`. Setiap perubahan lewat PR ke `development` dengan 4 check CI hijau. Lihat [docs/engineering-standard.md §6](docs/engineering-standard.md#6-git--pr).
+
+## Atribusi gambar contoh
+
+Gambar di `web/public/samples/` diperkecil ke sisi terpanjang 2048 px (thumbnail 480 px). Hasil deteksinya dibuat oleh model proyek ini.
+
+| File | Sumber | Lisensi |
+|---|---|---|
+| `impacted.jpg` | Coronation Dental Specialty Group, [Basic panoramic radiograph.jpg](https://commons.wikimedia.org/wiki/File:Basic_panoramic_radiograph.jpg), Wikimedia Commons | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) |
+| `restorations.jpg` (file 13.jpg), `missing.jpg` (file 80.jpg) | Brahmi, Jdey & Drira, [Panoramic Dental Xray Dataset](https://doi.org/10.17632/73n3kz2k4k.3), Mendeley Data V3 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 
 ## Tim
 

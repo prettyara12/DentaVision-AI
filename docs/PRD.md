@@ -201,5 +201,5 @@ Konsekuensi produk:
 | X-ray adalah data kesehatan | Tamu tidak disimpan; login privat + RLS; hapus permanen ([security-privacy.md](security-privacy.md)) |
 | HF Space tidur → kunjungan pertama lambat | Status "menyiapkan server" yang jujur + ping saat landing dibuka |
 | Kuota Gemini habis | Model cadangan saat 429; deteksi tetap jalan tanpa Gemini |
-| Lisensi gambar contoh / dataset | Gambar contoh hanya dari sumber berlisensi jelas (**Perlu keputusan pengguna**, roadmap M2) |
+| Lisensi gambar contoh / dataset | Gambar contoh hanya dari sumber berlisensi jelas: diputuskan 2026-10-26 (#12), Wikimedia Commons CC BY 3.0 + Mendeley Data CC BY 4.0, dengan atribusi. Lisensi dataset training masih **Perlu keputusan pengguna** (roadmap) |
 | Supabase ter-pause | Catatan di README; ping terjadwal hanya bila diputuskan nanti |
