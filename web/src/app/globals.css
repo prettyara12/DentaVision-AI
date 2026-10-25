@@ -76,6 +76,26 @@ body {
   color: var(--ink);
 }
 
+/* Scan line over the user's image while the server works (docs/design-system.md §4, `sweep`). */
+@keyframes scan-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.scan-sweep {
+  animation: scan-sweep 1600ms linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-sweep {
+    display: none;
+  }
+}
+
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;

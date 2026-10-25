@@ -119,7 +119,7 @@ Hasil spike M1 (2026-10-25, #7): pada 5 panoramik contoh, heatmap P3 jatuh di da
 
 | Method | Path | Fungsi |
 |---|---|---|
-| `POST` | `/api/scans` | Upload → kuota → validasi Gemini → `/v1/analyze` → (login & simpan) simpan. Respons: hasil + `scan_id` bila tersimpan |
+| `POST` | `/api/scans` | Upload → kuota → validasi Gemini → `/v1/analyze` → (login & simpan) simpan. Respons: stream event NDJSON (di bawah); hasil + `scan_id` bila tersimpan |
 | `GET` | `/api/samples/[key]` | Hasil contoh (cache statis, tanpa kuota) |
 | `POST` | `/api/scans/import` | Simpan hasil tamu (US-10) |
 | `DELETE` | `/api/scans/[id]` | Hapus scan + file Storage + chat terkait |
@@ -127,9 +127,23 @@ Hasil spike M1 (2026-10-25, #7): pada 5 panoramik contoh, heatmap P3 jatuh di da
 | `POST` | `/api/chat` | Stream jawaban chat (per scan / umum) |
 | `DELETE` | `/api/chats/[id]` | Hapus chat |
 | `DELETE` | `/api/account` | Hapus akun + semua data |
-| `GET` | `/api/health` | Teruskan status API inferensi (untuk state `waking`) |
+| `GET` | `/api/health` | Teruskan status API inferensi (untuk state `waking`): `ready`, `loading`, `error`, atau `waking` (Space tidur/tidak menjawab dalam 3 detik) |
 
 Setiap handler: autentikasi (opsional untuk tamu) → otorisasi kepemilikan → validasi Zod → kuota → aksi.
+
+**`POST /api/scans`**, `multipart/form-data` dengan `image` (JPEG/PNG terkompres) dan `locale` (`id`/`en`, default `id`).
+
+- Ditolak sebelum stream dimulai, dengan JSON `{ "code": ... }`: `411 length_required` (tanpa `Content-Length` yang valid, ditolak sebelum body dibaca), `400 invalid_request` (tanpa `image`), `413 too_large` (body/gambar > 4 MB), `415 unsupported_type` (magic bytes bukan JPEG/PNG). Dimensi diperiksa API inferensi (≤ 25 M piksel).
+- Selain itu respons `200` `application/x-ndjson`, satu objek per baris, sesuai urutan tahap di server:
+
+  ```json
+  { "type": "stage", "stage": "validating" }
+  { "type": "stage", "stage": "analyzing" }
+  { "type": "result", "result": { "...": "kontrak /v1/analyze §3.1" } }
+  ```
+
+  Event akhir adalah salah satu dari `result`, `rejected` (`reason`: kalimat Gemini, atau `null` bila ditolak pre-filter API), atau `error` (`code`: `busy`, `loading`, `unavailable`, `too_large`, `unsupported_type`).
+- Respons `/v1/analyze` divalidasi dengan Zod (`web/src/features/scan/result.ts`) sebelum diteruskan.
 
 ### 4.2 Gambar
 
@@ -241,6 +255,8 @@ Trigger `on auth.users insert` → buat `profiles`.
 Divalidasi lazy di `src/lib/env.ts` (Zod) supaya `next build` di CI tidak butuh secret.
 
 ### `api/.env`
+
+API tidak membaca file `.env`: variabel diisi lewat environment proses (shell saat lokal, Settings saat di HF Space). `api/.env.example` hanya daftar nama.
 
 | Variabel | Contoh |
 |---|---|
