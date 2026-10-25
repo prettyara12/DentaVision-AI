@@ -27,10 +27,18 @@
   "action.retry": "Try again",
   "action.another": "Choose another image",
   "result.title": "Scan result",
-  "result.count": "The AI marked {n} findings with confidence ≥ 0.25.",
-  "result.none": "The AI marked no findings with confidence ≥ 0.25.",
   "result.low_quality": "Low image resolution, findings may be missed.",
-  "result.viewer_pending": "Finding boxes and heatmaps arrive in the next version.",
   "result.empty": "No scan result in this tab yet.",
-  "result.new_scan": "Upload X-ray"
+  "result.new_scan": "Upload X-ray",
+  "findings.title": "Findings",
+  "findings.none_attention": "No findings that need attention.",
+  "findings.limits": "The model often misses findings, so this does not replace a dental exam.",
+  "findings.empty": "The AI marked nothing above this threshold.",
+  "findings.item": "{name}, highest confidence {conf}, boxes: {n}",
+  "filter.confidence": "Minimum confidence",
+  "filter.groups": "Show on image",
+  "viewer.label": "Panoramic X-ray with finding boxes. Arrow keys pan, plus and minus zoom.",
+  "viewer.zoom_in": "Zoom in",
+  "viewer.zoom_out": "Zoom out",
+  "viewer.reset": "Reset"
 }

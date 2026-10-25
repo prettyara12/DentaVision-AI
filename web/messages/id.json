@@ -27,10 +27,18 @@
   "action.retry": "Coba lagi",
   "action.another": "Pilih gambar lain",
   "result.title": "Hasil scan",
-  "result.count": "AI menandai {n} temuan dengan confidence ≥ 0,25.",
-  "result.none": "AI tidak menandai temuan dengan confidence ≥ 0,25.",
   "result.low_quality": "Resolusi gambar rendah, temuan bisa terlewat.",
-  "result.viewer_pending": "Tampilan kotak temuan dan heatmap menyusul di versi berikutnya.",
   "result.empty": "Belum ada hasil scan di tab ini.",
-  "result.new_scan": "Upload X-ray"
+  "result.new_scan": "Upload X-ray",
+  "findings.title": "Temuan",
+  "findings.none_attention": "Tidak ada temuan yang perlu perhatian.",
+  "findings.limits": "Model sering melewatkan temuan, jadi hasil ini tidak menggantikan pemeriksaan dokter gigi.",
+  "findings.empty": "AI tidak menandai temuan di atas ambang ini.",
+  "findings.item": "{name}, confidence tertinggi {conf}, {n} kotak",
+  "filter.confidence": "Confidence minimum",
+  "filter.groups": "Tampilkan di gambar",
+  "viewer.label": "X-ray panoramik dengan kotak temuan. Panah untuk menggeser, plus dan minus untuk zoom.",
+  "viewer.zoom_in": "Perbesar",
+  "viewer.zoom_out": "Perkecil",
+  "viewer.reset": "Atur ulang"
 }
