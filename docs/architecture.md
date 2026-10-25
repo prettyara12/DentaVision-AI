@@ -256,6 +256,8 @@ Divalidasi lazy di `src/lib/env.ts` (Zod) supaya `next build` di CI tidak butuh 
 
 ### `api/.env`
 
+API tidak membaca file `.env`: variabel diisi lewat environment proses (shell saat lokal, Settings saat di HF Space). `api/.env.example` hanya daftar nama.
+
 | Variabel | Contoh |
 |---|---|
 | `API_SECRET` | sama dengan `INFERENCE_API_SECRET` |
