@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { t, type Locale, type MessageKey } from "@/lib/i18n";
 import { Dropzone } from "./dropzone";
 import { analyzeResultSchema, SCAN_STORAGE_KEY, type ScanEvent, type StoredScan } from "./result";
@@ -52,8 +52,21 @@ export function ScanFlow({ lang }: { lang: Locale }) {
   const [phase, setPhase] = useState<Phase>({ name: "idle", problem: null });
   const [preview, setPreview] = useState<string | null>(null);
   const retry = useRef<() => void>(() => {});
+  const openedResult = useRef(false);
 
   useEffect(() => () => void (preview && URL.revokeObjectURL(preview)), [preview]);
+
+  // cacheComponents keeps this route mounted but hidden (<Activity>) after we navigate to the result,
+  // so "Upload X-ray" would come back to the finished progress screen. Reset once the result has opened.
+  useLayoutEffect(
+    () => () => {
+      if (!openedResult.current) return;
+      openedResult.current = false;
+      setPreview(null);
+      setPhase({ name: "idle", problem: null });
+    },
+    [],
+  );
 
   async function run(file: File) {
     const problem = checkFile(file);
@@ -113,6 +126,7 @@ export function ScanFlow({ lang }: { lang: Locale }) {
     } catch {
       return setPhase({ name: "error", message: "error.storage" });
     }
+    openedResult.current = true;
     router.push(`/${lang}/scan/result`);
   }
 
