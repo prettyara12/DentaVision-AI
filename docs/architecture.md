@@ -93,10 +93,10 @@ Error:
 
 ### 3.3 Grad-CAM per kelas
 
-1. Letterbox gambar ke 640 seperti preprocessing ultralytics (padding abu 114 di tengah), simpan area gambar.
-2. Satu forward `model.model` per request dengan grad aktif. Aktivasi layer target diambil lewat forward hook. Layer target: **P3**, input pertama `Detect` (`model[-1].f[0]`, layer 10, stride 8).
+1. Input = tensor dari `predictor.preprocess()` ultralytics, persis tensor yang dipakai deteksi (letterbox rect: sisi panjang 640, sisi pendek dibulatkan ke kelipatan 32, padding di tengah, resize cv2). Area gambar di dalam padding dihitung ulang dengan aturan `LetterBox` yang sama (dites terhadap `LetterBox` asli).
+2. Satu forward `model.model` per request dengan grad aktif. Aktivasi layer target diambil lewat forward hook. Layer target: **P3**, input pertama `Detect` (`model[-1].f[0]`, layer 10, stride 8). Skor kelas dibaca dari baris `4:` output `Detect`, baris yang sama yang dibaca NMS; susunan ini diperiksa saat runtime dan di smoke test.
 3. Untuk setiap kelas `c` dengan deteksi ≥ 0,25: skor = jumlah probabilitas kelas `c` pada anchor dengan probabilitas ≥ 0,25 dan argmax = `c`. Bila tidak ada anchor seperti itu, pakai anchor terkuat kelas `c`. Gradien via `torch.autograd.grad(retain_graph=True)`, satu kali per kelas.
-4. Bobot = rata-rata gradien per channel; CAM = ReLU(Σ bobot × aktivasi), upsample bilinear ke 640, normalisasi 0–1 terhadap puncaknya.
+4. Bobot = rata-rata gradien per channel; CAM = ReLU(Σ bobot × aktivasi), upsample bilinear ke ukuran input, normalisasi 0–1 terhadap puncaknya.
 5. Buang padding letterbox, resize ke sisi terpanjang 256 px, encode PNG grayscale.
 
 Hasil spike M1 (2026-10-25, #7): pada 5 panoramik contoh, heatmap P3 jatuh di dalam kotak deteksi pada 5/5 gambar; SPPF (stride 32) menyebar atau meleset pada 3/5. Waktu di CPU ±2–5 detik per request (forward + semua kelas), PNG 13–29 KB per kelas. Pilihan final: **P3**.

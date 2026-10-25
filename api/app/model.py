@@ -59,4 +59,7 @@ class YoloDetector:
         ]
 
     def heatmaps(self, rgb: np.ndarray, class_ids: list[int]) -> dict[str, str]:
-        return self.gradcam(rgb, class_ids)
+        # Same tensor detect() fed the model (rect letterbox, cv2 resize). The predictor exists
+        # after the first detect(); /v1/analyze always detects first.
+        x = self.model.predictor.preprocess([np.ascontiguousarray(rgb[:, :, ::-1])])
+        return self.gradcam(x, rgb.shape[:2], class_ids)

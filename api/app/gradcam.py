@@ -6,23 +6,19 @@ import torch
 import torch.nn.functional as F
 from PIL import Image
 
-IMGSZ = 640
 HEATMAP_SIDE = 256
 
 
-def letterbox(rgb: np.ndarray) -> tuple[np.ndarray, tuple[int, int, int, int]]:
-    """Fit into 640x640 with centred padding (as ultralytics). Returns image, (top, left, h, w)."""
-    h, w = rgb.shape[:2]
-    r = IMGSZ / max(h, w)
+def image_region(orig_hw: tuple[int, int], input_hw: tuple[int, int]) -> tuple[int, int, int, int]:
+    """Where ultralytics LetterBox (centred) put the image in the model input: top, left, h, w."""
+    (h, w), (ih, iw) = orig_hw, input_hw
+    r = min(ih / h, iw / w)
     nh, nw = round(h * r), round(w * r)
-    top, left = (IMGSZ - nh) // 2, (IMGSZ - nw) // 2
-    canvas = np.full((IMGSZ, IMGSZ, 3), 114, dtype=np.uint8)
-    canvas[top : top + nh, left : left + nw] = np.asarray(Image.fromarray(rgb).resize((nw, nh)))
-    return canvas, (top, left, nh, nw)
+    return round((ih - nh) / 2 - 0.1), round((iw - nw) / 2 - 0.1), nh, nw
 
 
 def encode_heatmap(cam: np.ndarray, region: tuple[int, int, int, int]) -> str:
-    """Crop a 640x640 CAM (0-1) to the image region, shrink to 256 px longest side, base64 PNG."""
+    """Crop a CAM (0-1) to the image region, shrink to 256 px longest side, base64 PNG."""
     top, left, nh, nw = region
     crop = (np.clip(cam[top : top + nh, left : left + nw], 0, 1) * 255).astype(np.uint8)
     r = HEATMAP_SIDE / max(nh, nw)
@@ -45,12 +41,18 @@ class GradCam:
         self._activation = output.detach().requires_grad_(torch.is_grad_enabled())
         return self._activation
 
-    def __call__(self, rgb: np.ndarray, class_ids: list[int], conf: float = 0.25) -> dict[str, str]:
-        image, region = letterbox(rgb)
-        param = next(self.net.parameters())
-        x = torch.from_numpy(image).permute(2, 0, 1)[None].to(param.device, param.dtype) / 255
+    def class_probs(self, x: torch.Tensor) -> torch.Tensor:
+        """(classes, anchors) sigmoid scores, the same rows NMS reads in detection."""
+        out = self.net(x)[0][0]  # Detect in eval: (boxes 4 + classes, anchors)
+        assert out.shape[0] == 4 + len(self.net.names), "unexpected Detect output layout"
+        return out[4:]
+
+    def __call__(
+        self, x: torch.Tensor, orig_hw: tuple[int, int], class_ids: list[int], conf: float = 0.25
+    ) -> dict[str, str]:
+        region = image_region(orig_hw, tuple(x.shape[2:]))
         with torch.enable_grad():
-            probs = self.net(x)[0][0, 4:]  # (classes, anchors), already sigmoid
+            probs = self.class_probs(x)
             activation = self._activation
             best = probs.argmax(0)
             heatmaps = {}
@@ -61,7 +63,7 @@ class GradCam:
                 (grad,) = torch.autograd.grad(score, activation, retain_graph=True)
                 weights = grad.mean(dim=(2, 3), keepdim=True)
                 cam = F.relu((weights * activation).sum(dim=1, keepdim=True))
-                cam = F.interpolate(cam, size=(IMGSZ, IMGSZ), mode="bilinear", align_corners=False)
+                cam = F.interpolate(cam, size=x.shape[2:], mode="bilinear", align_corners=False)
                 cam = cam[0, 0].detach().float().cpu().numpy()
                 peak = cam.max()
                 heatmaps[str(c)] = encode_heatmap(cam / peak if peak > 0 else cam, region)

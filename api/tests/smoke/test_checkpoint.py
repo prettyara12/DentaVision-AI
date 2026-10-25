@@ -82,8 +82,8 @@ def test_gradcam_returns_one_grayscale_png_per_class() -> None:
     from PIL import Image
 
     detector = YoloDetector(checkpoint_path())
-    rng = np.random.default_rng(0)
-    image = rng.integers(40, 160, size=(512, 1024, 3), dtype=np.uint8)
+    image = noise()
+    detector.detect(image)  # /v1/analyze order; the predictor's preprocessing is reused
     # Classes without any confident anchor still get a heatmap (strongest-anchor fallback).
     heatmaps = detector.heatmaps(image, [0, 7])
     assert set(heatmaps) == {"0", "7"}
@@ -92,3 +92,60 @@ def test_gradcam_returns_one_grayscale_png_per_class() -> None:
         assert png.mode == "L" and png.size == (256, 128)
     # Grad-CAM must not leave the network in grad mode for later predictions.
     assert all(not p.requires_grad for p in detector.model.model.parameters())
+
+
+def noise() -> np.ndarray:
+    return np.random.default_rng(0).integers(40, 160, size=(512, 1024, 3), dtype=np.uint8)
+
+
+def teeth() -> np.ndarray:
+    """Two rows of blurred bright ellipses: synthetic, yet the model finds confident boxes."""
+    from PIL import Image, ImageDraw, ImageFilter
+
+    image = Image.new("L", (1024, 512), 30)
+    draw = ImageDraw.Draw(image)
+    for top, bottom in [(120, 250), (262, 392)]:
+        for i in range(14):
+            draw.ellipse([150 + i * 52, top, 192 + i * 52, bottom], fill=150)
+    gray = np.asarray(image.filter(ImageFilter.GaussianBlur(2)))
+    return np.stack([gray] * 3, axis=-1)
+
+
+def test_gradcam_reads_the_scores_detection_used() -> None:
+    import torch
+
+    detector = YoloDetector(checkpoint_path())
+    image = teeth()
+    detections = detector.detect(image)
+    assert detections
+    predictor = detector.model.predictor
+    x = predictor.preprocess([np.ascontiguousarray(image[:, :, ::-1])])
+    assert tuple(x.shape) == (1, 3, 320, 640)  # rect letterbox, not a 640x640 square
+    with torch.no_grad():
+        probs = detector.gradcam.class_probs(x)
+        reference = predictor.inference(x)[0][0, 4:]
+    torch.testing.assert_close(probs, reference)  # CPU reductions are not bit-exact run to run
+    # Every kept box is one anchor's top class score (NMS without multi-label).
+    best = probs.max(0)
+    for d in detections:
+        anchors = best.indices == d["class_id"]
+        assert torch.isclose(best.values[anchors], torch.tensor(d["confidence"]), atol=1e-4).any()
+
+
+def test_gradcam_hook_does_not_change_detections() -> None:
+    from ultralytics import YOLO
+
+    image = teeth()
+    plain = (
+        YOLO(str(checkpoint_path()))
+        .predict(image[:, :, ::-1], imgsz=640, conf=0.10, iou=0.7, device="cpu", verbose=False)[0]
+        .boxes
+    )
+    detector = YoloDetector(checkpoint_path())
+    first = detector.detect(image)
+    assert first
+    detector.heatmaps(image, sorted({d["class_id"] for d in first}))
+    for detections in (first, detector.detect(image)):
+        assert [d["class_id"] for d in detections] == [int(c) for c in plain.cls.tolist()]
+        conf = [d["confidence"] for d in detections]
+        assert conf == pytest.approx([float(c) for c in plain.conf.tolist()], abs=1e-4)
