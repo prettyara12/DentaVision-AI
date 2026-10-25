@@ -37,8 +37,13 @@
   "findings.item": "{name}, highest confidence {conf}, boxes: {n}",
   "filter.confidence": "Minimum confidence",
   "filter.groups": "Show on image",
-  "viewer.label": "Panoramic X-ray with finding boxes. Arrow keys pan, plus and minus zoom.",
+  "viewer.label": "Panoramic X-ray with finding boxes. Arrow keys pan, plus and minus zoom, H toggles the heatmap.",
   "viewer.zoom_in": "Zoom in",
   "viewer.zoom_out": "Zoom out",
-  "viewer.reset": "Reset"
+  "viewer.reset": "Reset",
+  "heatmap.label": "Heatmap",
+  "heatmap.off": "Off",
+  "heatmap.opacity": "Opacity",
+  "heatmap.badge": "HEATMAP",
+  "heatmap.how": "Bright areas are the parts of the image that most influenced the AI when it marked {name}. The heatmap shows where the model looked, not the exact edge of a condition."
 }

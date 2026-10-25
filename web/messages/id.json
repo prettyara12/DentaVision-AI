@@ -37,8 +37,13 @@
   "findings.item": "{name}, confidence tertinggi {conf}, {n} kotak",
   "filter.confidence": "Confidence minimum",
   "filter.groups": "Tampilkan di gambar",
-  "viewer.label": "X-ray panoramik dengan kotak temuan. Panah untuk menggeser, plus dan minus untuk zoom.",
+  "viewer.label": "X-ray panoramik dengan kotak temuan. Panah untuk menggeser, plus dan minus untuk zoom, H untuk heatmap.",
   "viewer.zoom_in": "Perbesar",
   "viewer.zoom_out": "Perkecil",
-  "viewer.reset": "Atur ulang"
+  "viewer.reset": "Atur ulang",
+  "heatmap.label": "Heatmap",
+  "heatmap.off": "Mati",
+  "heatmap.opacity": "Opacity",
+  "heatmap.badge": "HEATMAP",
+  "heatmap.how": "Area terang adalah bagian gambar yang paling memengaruhi AI saat menandai {name}. Heatmap menunjukkan perhatian model, bukan batas pasti kondisi."
 }

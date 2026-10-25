@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { t, type Locale } from "@/lib/i18n";
+import { colorize } from "./heatmap";
 import { IDENTITY, boxToScreen, fitRect, panBy, zoomAt, type Rect, type View } from "./viewer-math";
 
 export type ViewerBox = {
@@ -20,13 +21,29 @@ type Props = {
   boxes: ViewerBox[];
   activeClass: number | null;
   onHoverClass: (classId: number | null) => void;
+  /** Base64 grayscale PNG of the selected class, or null when the heatmap is off. */
+  heatmap: string | null;
+  heatmapOpacity: number;
+  onToggleHeatmap: () => void;
 };
 
 const KEY_PAN = 48;
 const KEY_ZOOM = 1.25;
 
-export function XrayViewer({ lang, src, width, height, boxes, activeClass, onHoverClass }: Props) {
+export function XrayViewer({
+  lang,
+  src,
+  width,
+  height,
+  boxes,
+  activeClass,
+  onHoverClass,
+  heatmap,
+  heatmapOpacity,
+  onToggleHeatmap,
+}: Props) {
   const frame = useRef<HTMLDivElement>(null);
+  const heatCanvas = useRef<HTMLCanvasElement>(null);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [view, setView] = useState<View>(IDENTITY);
@@ -46,6 +63,28 @@ export function XrayViewer({ lang, src, width, height, boxes, activeClass, onHov
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+
+  // Colour the API's grayscale CAM in the browser; the previous one stays until the new one is drawn.
+  useEffect(() => {
+    if (!heatmap) return;
+    let cancelled = false;
+    const image = new Image();
+    image.onload = () => {
+      const canvas = heatCanvas.current;
+      const ctx = canvas?.getContext("2d");
+      if (cancelled || !canvas || !ctx) return;
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      ctx.drawImage(image, 0, 0);
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      colorize(data.data);
+      ctx.putImageData(data, 0, 0);
+    };
+    image.src = `data:image/png;base64,${heatmap}`;
+    return () => {
+      cancelled = true;
+    };
+  }, [heatmap, fit]);
 
   // React's onWheel is passive, so preventDefault (stop page scroll while zooming) needs a native listener.
   useEffect(() => {
@@ -119,6 +158,7 @@ export function XrayViewer({ lang, src, width, height, boxes, activeClass, onHov
     else if (event.key === "+" || event.key === "=") zoomCentre(KEY_ZOOM);
     else if (event.key === "-") zoomCentre(1 / KEY_ZOOM);
     else if (event.key === "0") setView(IDENTITY);
+    else if (event.key === "h" || event.key === "H") onToggleHeatmap();
     else return;
     event.preventDefault();
   }
@@ -151,6 +191,17 @@ export function XrayViewer({ lang, src, width, height, boxes, activeClass, onHov
               style={{
                 width: fit.width,
                 height: fit.height,
+                transform: `translate(${fit.left + view.x}px, ${fit.top + view.y}px) scale(${view.scale})`,
+              }}
+            />
+            <canvas
+              ref={heatCanvas}
+              aria-hidden
+              className="pointer-events-none absolute top-0 left-0 origin-top-left transition-opacity duration-200 ease-[cubic-bezier(.2,.8,.2,1)] motion-reduce:transition-none"
+              style={{
+                width: fit.width,
+                height: fit.height,
+                opacity: heatmap ? heatmapOpacity : 0,
                 transform: `translate(${fit.left + view.x}px, ${fit.top + view.y}px) scale(${view.scale})`,
               }}
             />

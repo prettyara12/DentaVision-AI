@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { classCatalog, GROUPS, groupInfo } from "./class-catalog";
 import { groupFindings } from "./findings";
+import { colorize, inferno } from "./heatmap";
 import { IDENTITY, boxToScreen, clampView, fitRect, panBy, zoomAt } from "./viewer-math";
 
 // `model.names` of best_resnet50.pt in id order (same list as api/tests/smoke/test_checkpoint.py).
@@ -117,5 +118,21 @@ describe("viewer math", () => {
     expect(zoomAt(IDENTITY, fit, 100, 0, 50).scale).toBe(8);
     expect(panBy(IDENTITY, fit, 300, 300)).toEqual(IDENTITY);
     expect(clampView({ scale: 2, x: -5000, y: 10 }, fit)).toEqual({ scale: 2, x: -1000, y: 0 });
+  });
+});
+
+describe("heatmap colormap", () => {
+  it("runs inferno from near-black to pale yellow", () => {
+    expect(inferno(0)).toEqual([0, 0, 4]);
+    expect(inferno(255)).toEqual([252, 255, 164]);
+    expect(inferno(-5)).toEqual(inferno(0));
+  });
+
+  it("colours grayscale pixels with alpha rising with intensity", () => {
+    const px = colorize(
+      new Uint8ClampedArray([0, 0, 0, 255, 128, 128, 128, 255, 255, 255, 255, 255]),
+    );
+    expect([px[3], px[7], px[11]]).toEqual([0, 128, 255]);
+    expect([...px.slice(8, 11)]).toEqual(inferno(255));
   });
 });
