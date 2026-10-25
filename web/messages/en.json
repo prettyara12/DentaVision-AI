@@ -45,5 +45,8 @@
   "heatmap.off": "Off",
   "heatmap.opacity": "Opacity",
   "heatmap.badge": "HEATMAP",
-  "heatmap.how": "Bright areas are the parts of the image that most influenced the AI when it marked {name}. The heatmap shows where the model looked, not the exact edge of a condition."
+  "heatmap.how": "Bright areas are the parts of the image that most influenced the AI when it marked {name}. The heatmap shows where the model looked, not the exact edge of a condition.",
+  "sample.title": "Try a sample",
+  "sample.credit": "Sample image: {credit}, licensed",
+  "sample.loading": "Opening sample"
 }

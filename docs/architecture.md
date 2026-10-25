@@ -120,7 +120,7 @@ Hasil spike M1 (2026-10-25, #7): pada 5 panoramik contoh, heatmap P3 jatuh di da
 | Method | Path | Fungsi |
 |---|---|---|
 | `POST` | `/api/scans` | Upload → kuota → validasi Gemini → `/v1/analyze` → (login & simpan) simpan. Respons: stream event NDJSON (di bawah); hasil + `scan_id` bila tersimpan |
-| `GET` | `/api/samples/[key]` | Hasil contoh (cache statis, tanpa kuota) |
+| `GET` | `/api/samples/[key]` | Hasil contoh (cache statis, tanpa kuota). `key` = `impacted`, `restorations`, `missing`. 200 = hasil `/v1/analyze` yang dihitung sekali dengan API lokal (`web/src/features/scan/samples/*.json`), di-prerender saat build; 404 `not_found` untuk key lain. Gambarnya file statis `web/public/samples/{key}.jpg` (+ `-thumb.jpg`), sisi terpanjang 2048 px seperti upload. Tanpa validasi Gemini dan tanpa panggilan inferensi |
 | `POST` | `/api/scans/import` | Simpan hasil tamu (US-10) |
 | `DELETE` | `/api/scans/[id]` | Hapus scan + file Storage + chat terkait |
 | `POST` | `/api/insight` | Stream insight untuk daftar temuan; bila `scan_id` ada, simpan hasil akhir |

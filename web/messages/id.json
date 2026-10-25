@@ -45,5 +45,8 @@
   "heatmap.off": "Mati",
   "heatmap.opacity": "Opacity",
   "heatmap.badge": "HEATMAP",
-  "heatmap.how": "Area terang adalah bagian gambar yang paling memengaruhi AI saat menandai {name}. Heatmap menunjukkan perhatian model, bukan batas pasti kondisi."
+  "heatmap.how": "Area terang adalah bagian gambar yang paling memengaruhi AI saat menandai {name}. Heatmap menunjukkan perhatian model, bukan batas pasti kondisi.",
+  "sample.title": "Coba contoh",
+  "sample.credit": "Gambar contoh: {credit}, lisensi",
+  "sample.loading": "Membuka contoh"
 }

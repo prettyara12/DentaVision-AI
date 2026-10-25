@@ -1,16 +1,18 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { t, type Locale, type MessageKey } from "@/lib/i18n";
 import { Dropzone } from "./dropzone";
-import { SCAN_STORAGE_KEY, type ScanEvent, type StoredScan } from "./result";
+import { analyzeResultSchema, SCAN_STORAGE_KEY, type ScanEvent, type StoredScan } from "./result";
+import type { SampleKey } from "./samples";
 import { ScanProgress, type ProgressPhase } from "./scan-progress";
 import { checkFile, compressImage, readLines, toDataUrl } from "./upload";
 
 type Phase =
   | { name: "idle"; problem: MessageKey | null }
   | { name: ProgressPhase }
+  | { name: "sample" }
   | { name: "rejected"; reason: string | null }
   | { name: "error"; message: MessageKey };
 
@@ -49,14 +51,27 @@ export function ScanFlow({ lang }: { lang: Locale }) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>({ name: "idle", problem: null });
   const [preview, setPreview] = useState<string | null>(null);
-  const lastFile = useRef<File | null>(null);
+  const retry = useRef<() => void>(() => {});
+  const openedResult = useRef(false);
 
   useEffect(() => () => void (preview && URL.revokeObjectURL(preview)), [preview]);
+
+  // cacheComponents keeps this route mounted but hidden (<Activity>) after we navigate to the result,
+  // so "Upload X-ray" would come back to the finished progress screen. Reset once the result has opened.
+  useLayoutEffect(
+    () => () => {
+      if (!openedResult.current) return;
+      openedResult.current = false;
+      setPreview(null);
+      setPhase({ name: "idle", problem: null });
+    },
+    [],
+  );
 
   async function run(file: File) {
     const problem = checkFile(file);
     if (problem) return setPhase({ name: "idle", problem: `drop.${problem}` });
-    lastFile.current = file;
+    retry.current = () => run(file);
     setPhase({ name: "preparing" });
 
     let image: Blob;
@@ -97,20 +112,41 @@ export function ScanFlow({ lang }: { lang: Locale }) {
           return setPhase({ name: "rejected", reason: event.reason });
         else if (event.type === "error")
           return setPhase({ name: "error", message: `error.${event.code}` });
-        else {
-          const scan: StoredScan = { image: await toDataUrl(image), result: event.result };
-          try {
-            sessionStorage.setItem(SCAN_STORAGE_KEY, JSON.stringify(scan));
-          } catch {
-            return setPhase({ name: "error", message: "error.storage" });
-          }
-          return router.push(`/${lang}/scan/result`);
-        }
+        else return open({ image: await toDataUrl(image), result: event.result });
       }
     } catch {
       // Stream cut off (network drop or function timeout) before a final event.
     }
     setPhase({ name: "error", message: "error.unavailable" });
+  }
+
+  function open(scan: StoredScan) {
+    try {
+      sessionStorage.setItem(SCAN_STORAGE_KEY, JSON.stringify(scan));
+    } catch {
+      return setPhase({ name: "error", message: "error.storage" });
+    }
+    openedResult.current = true;
+    router.push(`/${lang}/scan/result`);
+  }
+
+  // Samples skip validation and inference: the result was computed once and ships with the app (US-01).
+  async function trySample(key: SampleKey) {
+    retry.current = () => trySample(key);
+    setPhase({ name: "sample" });
+    try {
+      const [image, result] = await Promise.all([
+        fetch(`/samples/${key}.jpg`).then((r) => (r.ok ? r.blob() : Promise.reject(r.status))),
+        fetch(`/api/samples/${key}`).then((r) => (r.ok ? r.json() : Promise.reject(r.status))),
+      ]);
+      open({
+        image: await toDataUrl(image),
+        result: analyzeResultSchema.parse(result),
+        sample: key,
+      });
+    } catch {
+      setPhase({ name: "error", message: "error.unavailable" });
+    }
   }
 
   function reset() {
@@ -119,7 +155,7 @@ export function ScanFlow({ lang }: { lang: Locale }) {
   }
 
   if (phase.name === "idle") {
-    return <Dropzone lang={lang} problem={phase.problem} onFile={run} />;
+    return <Dropzone lang={lang} problem={phase.problem} onFile={run} onSample={trySample} />;
   }
   if (phase.name === "rejected" || phase.name === "error") {
     return (
@@ -133,11 +169,10 @@ export function ScanFlow({ lang }: { lang: Locale }) {
           <p className="text-sm text-ink-2">{t(lang, "rejected.hint")}</p>
         )}
         <div className="flex flex-wrap gap-3">
-          {/* `error` is only reached after a file was chosen, so lastFile is set. */}
           {phase.name === "error" && (
             <button
               type="button"
-              onClick={() => lastFile.current && run(lastFile.current)}
+              onClick={() => retry.current()}
               className="min-h-11 rounded-sm bg-accent px-5 text-sm font-medium text-accent-ink"
             >
               {t(lang, "action.retry")}
@@ -152,6 +187,13 @@ export function ScanFlow({ lang }: { lang: Locale }) {
           </button>
         </div>
       </div>
+    );
+  }
+  if (phase.name === "sample") {
+    return (
+      <p role="status" className="text-sm text-ink-2">
+        {t(lang, "sample.loading")}
+      </p>
     );
   }
   return preview ? (

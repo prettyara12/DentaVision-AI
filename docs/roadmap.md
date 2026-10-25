@@ -17,7 +17,8 @@ Setiap milestone berakhir dengan sesuatu yang bisa di-demo. Fitur `F*` dan story
 | Item | Dibutuhkan sebelum | Pemilik |
 |---|---|---|
 | ~~Nama & visibilitas model repo HF Hub~~ ✅ 2026-10-25: `adrielwalintukan/dentavision-yolov8m-resnet50`, publik, diunggah Adriel atas izin pemilik repo (#5) | M0 selesai | Pemilik repo |
-| Sumber + lisensi dataset dan gambar contoh | M2 selesai | Pemilik repo |
+| ~~Sumber + lisensi gambar contoh~~ ✅ 2026-10-26: Wikimedia Commons (CC BY 3.0) + Brahmi dkk., Mendeley Data V3 (CC BY 4.0), atribusi di halaman hasil dan README (#12) | M2 selesai | Pemilik repo |
+| Sumber + lisensi dataset training | M5 (halaman Tentang model) | Pemilik repo |
 | Akses split validasi untuk metrik per kelas | M5 (halaman Tentang model) | Pemilik repo |
 | `GEMINI_FALLBACK_MODEL` | M3 | Agent, verifikasi dokumentasi resmi |
 | ~~Layer Grad-CAM final (SPPF / P3)~~ ✅ 2026-10-25: P3 (input pertama `Detect`), lihat [architecture §3.3](architecture.md#33-grad-cam-per-kelas) (#7) | M1 | Agent, berdasarkan spike |

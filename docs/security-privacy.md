@@ -15,6 +15,8 @@ X-ray adalah **data kesehatan**. Prinsipnya: simpan sesedikit mungkin, hanya bil
 
 `sessionStorage` hilang saat tab ditutup. Tidak ada `localStorage` untuk data scan.
 
+Gambar contoh ("Coba contoh") bukan data pengguna: X-ray publik berlisensi CC BY dari Wikimedia Commons dan Mendeley Data, tanpa nama atau identitas pasien yang terlihat. Hasilnya dihitung sekali dan ikut di repo, jadi memilih contoh tidak mengirim apa pun ke Gemini atau API inferensi.
+
 ## 2. Pihak ketiga
 
 | Pihak | Menerima | Untuk |
