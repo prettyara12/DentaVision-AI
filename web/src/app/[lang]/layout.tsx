@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { notFound } from "next/navigation";
 import { isLocale, locales, t } from "@/lib/i18n";
@@ -6,6 +6,9 @@ import "../globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+
+// The on-screen keyboard shrinks the layout, so the chat sheet stays above it.
+export const viewport: Viewport = { interactiveWidget: "resizes-content" };
 
 export function generateStaticParams() {
   return locales.map((lang) => ({ lang }));
