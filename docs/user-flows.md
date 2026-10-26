@@ -87,7 +87,7 @@ Kalau tab ditutup sebelum login selesai, data tamu hilang. Ini sesuai aturan pri
 
 - **Per scan**: panel di halaman hasil (desktop: kolom kanan; HP: bottom sheet). Untuk pengguna login, chat dibuat di DB saat pesan pertama dikirim, terhubung ke `scan_id`.
 - **Umum**: `/chat`. Pesan pertama pengguna login membuat chat baru lalu URL berganti ke `/chats/[id]`.
-- **Tamu**: riwayat pesan disimpan di `sessionStorage` dan dikirim ulang ke server setiap giliran (maks 20 pesan).
+- **Tamu**: riwayat pesan disimpan di `sessionStorage` dan dikirim ulang ke server setiap giliran (maks 20 pesan). Browser menyimpan maks 100 pesan terakhir; yang lebih lama dibuang.
 
 ## 6. Kasus khusus
 

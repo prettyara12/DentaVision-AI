@@ -5,7 +5,7 @@ import { SCAN_STORAGE_KEY, storedScanSchema, type StoredScan } from "@/features/
 import { readLines } from "@/features/scan/upload";
 import type { Locale } from "@/lib/i18n";
 import { MAX_HISTORY, type ChatEvent } from "./chat";
-import { MAX_MODEL_CHARS, type ChatMessage } from "./message";
+import { MAX_KEPT_MESSAGES, MAX_MODEL_CHARS, type ChatMessage } from "./message";
 
 export const GENERAL_CHAT_STORAGE_KEY = "dentavision:chat";
 
@@ -38,7 +38,9 @@ export function useChat(lang: Locale, scan: StoredScan | null, initial: ChatMess
   // Hiding or leaving the page stops the answer; the question stays and can be asked again.
   useEffect(() => () => controller.current?.abort(), []);
 
-  const ask = (history: ChatMessage[]) => {
+  const ask = (asked: ChatMessage[]) => {
+    // Oldest messages drop off so the tab's storage stays bounded.
+    const history = asked.slice(-MAX_KEPT_MESSAGES);
     controller.current?.abort();
     const current = new AbortController();
     controller.current = current;
@@ -70,7 +72,7 @@ export function useChat(lang: Locale, scan: StoredScan | null, initial: ChatMess
             setDraft(answer);
           } else if (event.type === "done") {
             const next: ChatMessage[] = [
-              ...history,
+              ...history.slice(1 - MAX_KEPT_MESSAGES),
               { role: "model", text: answer.slice(0, MAX_MODEL_CHARS) },
             ];
             setMessages(next);

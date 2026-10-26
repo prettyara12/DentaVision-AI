@@ -3,14 +3,14 @@ import { CONTEXT_MIN_CONFIDENCE, insightSchema } from "@/features/insight/insigh
 import { groupFindings, type Detection } from "@/features/scan/findings";
 import { analyzeResultSchema } from "@/features/scan/result";
 import { locales, t, type Locale } from "@/lib/i18n";
-import { chatMessageSchema, type ChatMessage } from "./message";
+import { chatMessageSchema, MAX_KEPT_MESSAGES, type ChatMessage } from "./message";
 
 // docs/ai-design.md §4.
 export const MAX_HISTORY = 20;
 
 export const chatRequestSchema = z.object({
   locale: z.enum(locales),
-  messages: z.array(chatMessageSchema).min(1).max(100),
+  messages: z.array(chatMessageSchema).min(1).max(MAX_KEPT_MESSAGES),
   /** Present for chat about a scan: the findings (text only) and the insight summary, if any. */
   scan: z
     .object({
