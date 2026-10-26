@@ -75,7 +75,8 @@ function onTabKey(event: KeyboardEvent, current: Tab, select: (tab: Tab) => void
 }
 
 // Below 640 px the chat tab opens as a bottom sheet over the page (docs/design-system.md §6).
-const isPhone = () => window.matchMedia("(max-width: 639px)").matches;
+const PHONE = "(max-width: 639px)";
+const isPhone = () => window.matchMedia(PHONE).matches;
 
 function Workspace({ lang, scan }: { lang: Locale; scan: StoredScan }) {
   const [minConfidence, setMinConfidence] = useState(DEFAULT_MIN_CONFIDENCE);
@@ -100,21 +101,36 @@ function Workspace({ lang, scan }: { lang: Locale; scan: StoredScan }) {
     if (next === "chat" && isPhone())
       requestAnimationFrame(() => document.getElementById("chat-input")?.focus());
   };
-  const closeSheet = () => {
-    setTab(lastTab);
-    document.getElementById("tab-chat")?.focus();
-  };
+  const closeSheet = () => setTab(lastTab);
 
-  // Esc closes the sheet wherever focus is (it may sit on <body> after a suggestion chip goes away).
+  // On phones the chat sheet is modal: everything behind it is inert (no focus, hidden from screen
+  // readers) and Esc closes it wherever focus is. Focus goes back to the Chat tab on close.
   useEffect(() => {
     if (tab !== "chat") return;
+    const phone = window.matchMedia(PHONE);
+    const behind: Element[] = [];
+    for (
+      let node = document.getElementById("panel-chat");
+      node?.parentElement;
+      node = node.parentElement
+    ) {
+      for (const sibling of node.parentElement.children) {
+        if (sibling !== node && !sibling.hasAttribute("data-sheet-backdrop")) behind.push(sibling);
+      }
+    }
+    const sync = () => behind.forEach((el) => el.toggleAttribute("inert", phone.matches));
     const onKey = (event: globalThis.KeyboardEvent) => {
-      if (event.key !== "Escape" || !isPhone()) return;
-      setTab(lastTab);
-      document.getElementById("tab-chat")?.focus();
+      if (event.key === "Escape" && phone.matches) setTab(lastTab);
     };
+    sync();
+    phone.addEventListener("change", sync);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      phone.removeEventListener("change", sync);
+      window.removeEventListener("keydown", onKey);
+      behind.forEach((el) => el.removeAttribute("inert"));
+      if (phone.matches) document.getElementById("tab-chat")?.focus();
+    };
   }, [tab, lastTab]);
 
   const groups = useMemo(
@@ -211,6 +227,7 @@ function Workspace({ lang, scan }: { lang: Locale; scan: StoredScan }) {
         {tab === "chat" && (
           <div
             aria-hidden
+            data-sheet-backdrop
             onClick={closeSheet}
             className="fixed inset-0 z-40 bg-black/50 sm:hidden"
           />
