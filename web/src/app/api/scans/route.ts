@@ -1,4 +1,5 @@
 import type { ScanEvent } from "@/features/scan/result";
+import { readBody } from "@/lib/body";
 import { isRejected, validateXray } from "@/lib/gemini";
 import { isLocale } from "@/lib/i18n";
 import { analyzeImage } from "@/lib/inference";
@@ -21,12 +22,10 @@ const fail = (status: number, code: string) => Response.json({ code }, { status 
 
 export async function POST(request: Request) {
   // shortcut: no auth or quota yet, both land with #15/#18 (M4); guests are unlimited until then.
-  // Without a valid Content-Length, formData() would buffer an unbounded body before any size
-  // check; browsers always send one for FormData, so require it (same rule as the API, 411).
-  const declared = request.headers.get("content-length");
-  if (!declared || !/^\d+$/.test(declared)) return fail(411, "length_required");
-  if (Number(declared) > MAX_BODY_BYTES) return fail(413, "too_large");
-  const form = await request.formData().catch(() => null);
+  // Browsers always send Content-Length for FormData; the cap holds even if it lies (same rule as the API, 411).
+  const read = await readBody(request, MAX_BODY_BYTES);
+  if ("error" in read) return read.error;
+  const form = await read.body.formData().catch(() => null);
   const image = form?.get("image");
   const localeField = form?.get("locale");
   const locale = isLocale(localeField) ? localeField : "id";

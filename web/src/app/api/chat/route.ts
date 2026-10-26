@@ -1,5 +1,6 @@
 import { chatRequestSchema, lastTurns, type ChatEvent } from "@/features/chat/chat";
 import { findingsContext } from "@/features/insight/insight";
+import { readBody } from "@/lib/body";
 import { streamChat } from "@/lib/gemini";
 
 // 100 messages of history plus up to 500 detections stay well under this.
@@ -9,10 +10,9 @@ const fail = (status: number, code: string) => Response.json({ code }, { status 
 
 export async function POST(request: Request) {
   // shortcut: no auth or quota yet, both land with #15/#18 (M4); guests are unlimited until then.
-  const declared = request.headers.get("content-length");
-  if (!declared || !/^\d+$/.test(declared)) return fail(411, "length_required");
-  if (Number(declared) > MAX_BODY_BYTES) return fail(413, "too_large");
-  const body = chatRequestSchema.safeParse(await request.json().catch(() => null));
+  const read = await readBody(request, MAX_BODY_BYTES);
+  if ("error" in read) return read.error;
+  const body = chatRequestSchema.safeParse(await read.body.json().catch(() => null));
   if (!body.success) return fail(400, "invalid_request");
 
   const { locale, messages, scan } = body.data;
