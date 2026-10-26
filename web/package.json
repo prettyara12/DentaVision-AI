@@ -9,7 +9,8 @@
     "lint": "eslint --max-warnings=0 . && prettier --check .",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
-    "eval:insight": "vitest run --config vitest.eval.config.ts",
+    "eval:insight": "vitest run --config vitest.eval.config.ts insight",
+    "eval:chat": "vitest run --config vitest.eval.config.ts chat",
     "format": "prettier --write ."
   },
   "dependencies": {
