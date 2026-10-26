@@ -145,7 +145,7 @@ Basis shadcn/ui (Radix + Lucide), semua di-restyle dengan tokens. Tampilan defau
 
 | Breakpoint | Ruang terang | Lightbox (hasil) |
 |---|---|---|
-| < 640 | Satu kolom; nav atas ringkas + menu sheet | Viewer penuh lebar di atas (tinggi 55vh). Di bawahnya tab **Temuan / Ringkasan / Chat**. Chat sebagai bottom sheet di atas keyboard |
+| < 640 | Satu kolom; nav atas ringkas + menu sheet | Viewer penuh lebar di atas (tinggi 55vh). Di bawahnya tab **Temuan / Ringkasan / Chat**. Chat sebagai bottom sheet modal di atas keyboard: konten di belakangnya `inert`, Esc / "Tutup chat" / ketuk backdrop kembali ke tab sebelumnya dan fokus balik ke tab Chat |
 | 640–1024 | Dua kolom fleksibel | Viewer atas, panel tab di bawah |
 | ≥ 1024 | Grid 12 kolom | Viewer kiri (8 kolom), panel kanan (4 kolom) dengan tab Temuan / Ringkasan / Chat |
 

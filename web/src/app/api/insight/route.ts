@@ -8,6 +8,7 @@ import {
 } from "@/features/insight/insight";
 import { parsePartialJson } from "@/features/insight/partial-json";
 import { analyzeResultSchema } from "@/features/scan/result";
+import { readBody } from "@/lib/body";
 import { streamInsight } from "@/lib/gemini";
 import { locales } from "@/lib/i18n";
 
@@ -23,10 +24,9 @@ const fail = (status: number, code: string) => Response.json({ code }, { status 
 
 export async function POST(request: Request) {
   // shortcut: no auth or quota yet, both land with #15/#18 (M4); guests are unlimited until then.
-  const declared = request.headers.get("content-length");
-  if (!declared || !/^\d+$/.test(declared)) return fail(411, "length_required");
-  if (Number(declared) > MAX_BODY_BYTES) return fail(413, "too_large");
-  const body = requestSchema.safeParse(await request.json().catch(() => null));
+  const read = await readBody(request, MAX_BODY_BYTES);
+  if ("error" in read) return read.error;
+  const body = requestSchema.safeParse(await read.body.json().catch(() => null));
   if (!body.success) return fail(400, "invalid_request");
 
   const { locale, detections } = body.data;

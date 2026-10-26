@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { chatMessageSchema } from "@/features/chat/message";
 import { insightSchema } from "@/features/insight/insight";
 import { locales } from "@/lib/i18n";
 
@@ -41,6 +42,8 @@ export const storedScanSchema = z.object({
   insight: z
     .object({ locale: z.enum(locales), version: z.string(), data: insightSchema })
     .optional(),
+  /** Chat about this scan; replaced together with the scan, so it never outlives it. */
+  chat: z.array(chatMessageSchema).optional(),
 });
 
 export type StoredScan = z.infer<typeof storedScanSchema>;

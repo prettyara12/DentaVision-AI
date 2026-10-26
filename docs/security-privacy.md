@@ -22,7 +22,7 @@ Gambar contoh ("Coba contoh") bukan data pengguna: X-ray publik berlisensi CC BY
 | Pihak | Menerima | Untuk |
 |---|---|---|
 | Google Gemini (free tier) | Gambar terkompres | Validasi "apakah ini X-ray gigi" |
-| Google Gemini (free tier) | Daftar temuan (teks) + pesan chat | Insight & chat |
+| Google Gemini (free tier) | Daftar temuan (teks), ringkasan insight sebelumnya, pesan chat (maks 20 terakhir) | Insight & chat |
 | Hugging Face Spaces | Gambar terkompres | Inferensi; tidak disimpan oleh `api/` |
 | Supabase | Data akun login | Auth, DB, Storage |
 | Vercel | Request HTTP | Hosting web |

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { groupFindings, type Detection } from "@/features/scan/findings";
 
 // docs/ai-design.md §2–3. Bump the version when the prompt or the context format changes.
-export const INSIGHT_PROMPT_VERSION = "insight@1";
+export const INSIGHT_PROMPT_VERSION = "insight@2";
 export const CONTEXT_MIN_CONFIDENCE = 0.25;
 
 export const insightSchema = z.object({

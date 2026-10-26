@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useSyncExternalStore, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore, type KeyboardEvent } from "react";
+import { suggestions } from "@/features/chat/chat";
+import { ChatPanel } from "@/features/chat/chat-panel";
+import { useChat } from "@/features/chat/use-chat";
 import { CONTEXT_MIN_CONFIDENCE } from "@/features/insight/insight";
 import { InsightPanel } from "@/features/insight/insight-panel";
 import { useInsight } from "@/features/insight/use-insight";
@@ -55,10 +58,11 @@ export function ResultWorkspace({ lang }: { lang: Locale }) {
       </div>
     );
   }
-  return <Workspace lang={lang} scan={scan} />;
+  // A new scan in this tab starts a fresh workspace (filters, insight, chat).
+  return <Workspace key={scan.image} lang={lang} scan={scan} />;
 }
 
-const TABS = ["findings", "summary"] as const;
+const TABS = ["findings", "summary", "chat"] as const;
 type Tab = (typeof TABS)[number];
 
 // WAI-ARIA tabs: arrow keys move between tabs and select them.
@@ -69,6 +73,10 @@ function onTabKey(event: KeyboardEvent, current: Tab, select: (tab: Tab) => void
   select(next);
   document.getElementById(`tab-${next}`)?.focus();
 }
+
+// Below 640 px the chat tab opens as a bottom sheet over the page (docs/design-system.md §6).
+const PHONE = "(max-width: 639px)";
+const isPhone = () => window.matchMedia(PHONE).matches;
 
 function Workspace({ lang, scan }: { lang: Locale; scan: StoredScan }) {
   const [minConfidence, setMinConfidence] = useState(DEFAULT_MIN_CONFIDENCE);
@@ -83,7 +91,47 @@ function Workspace({ lang, scan }: { lang: Locale; scan: StoredScan }) {
   const [chosenHeatmap, setChosenHeatmap] = useState<number | null>(null);
   const [heatmapOpacity, setHeatmapOpacity] = useState(DEFAULT_HEATMAP_OPACITY);
   const [tab, setTab] = useState<Tab>("findings");
+  const [lastTab, setLastTab] = useState<Exclude<Tab, "chat">>("findings");
   const insight = useInsight(scan, lang);
+  const chat = useChat(lang, scan, scan.chat ?? []);
+
+  const selectTab = (next: Tab) => {
+    if (next !== "chat") setLastTab(next);
+    setTab(next);
+    if (next === "chat" && isPhone())
+      requestAnimationFrame(() => document.getElementById("chat-input")?.focus());
+  };
+  const closeSheet = () => setTab(lastTab);
+
+  // On phones the chat sheet is modal: everything behind it is inert (no focus, hidden from screen
+  // readers) and Esc closes it wherever focus is. Focus goes back to the Chat tab on close.
+  useEffect(() => {
+    if (tab !== "chat") return;
+    const phone = window.matchMedia(PHONE);
+    const behind: Element[] = [];
+    for (
+      let node = document.getElementById("panel-chat");
+      node?.parentElement;
+      node = node.parentElement
+    ) {
+      for (const sibling of node.parentElement.children) {
+        if (sibling !== node && !sibling.hasAttribute("data-sheet-backdrop")) behind.push(sibling);
+      }
+    }
+    const sync = () => behind.forEach((el) => el.toggleAttribute("inert", phone.matches));
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape" && phone.matches) setTab(lastTab);
+    };
+    sync();
+    phone.addEventListener("change", sync);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      phone.removeEventListener("change", sync);
+      window.removeEventListener("keydown", onKey);
+      behind.forEach((el) => el.removeAttribute("inert"));
+      if (phone.matches) document.getElementById("tab-chat")?.focus();
+    };
+  }, [tab, lastTab]);
 
   const groups = useMemo(
     () => groupFindings(scan.result.detections, minConfidence),
@@ -141,7 +189,7 @@ function Workspace({ lang, scan }: { lang: Locale; scan: StoredScan }) {
         <div
           role="tablist"
           aria-label={t(lang, "tabs.label")}
-          onKeyDown={(e) => onTabKey(e, tab, setTab)}
+          onKeyDown={(e) => onTabKey(e, tab, selectTab)}
           className="flex gap-1 border-b border-rule"
         >
           {TABS.map((id) => (
@@ -153,7 +201,7 @@ function Workspace({ lang, scan }: { lang: Locale; scan: StoredScan }) {
               aria-selected={tab === id}
               aria-controls={`panel-${id}`}
               tabIndex={tab === id ? 0 : -1}
-              onClick={() => setTab(id)}
+              onClick={() => selectTab(id)}
               className="-mb-px min-h-11 border-b-2 border-transparent px-3 text-sm font-medium text-ink-2 aria-selected:border-accent aria-selected:text-ink"
             >
               {t(lang, `tabs.${id}`)}
@@ -174,6 +222,40 @@ function Workspace({ lang, scan }: { lang: Locale; scan: StoredScan }) {
             state={insight.state}
             noAttention={insightNoAttention}
             onGenerate={insight.generate}
+          />
+        </div>
+        {tab === "chat" && (
+          <div
+            aria-hidden
+            data-sheet-backdrop
+            onClick={closeSheet}
+            className="fixed inset-0 z-40 bg-black/50 sm:hidden"
+          />
+        )}
+        <div
+          id="panel-chat"
+          role="tabpanel"
+          aria-labelledby="tab-chat"
+          hidden={tab !== "chat"}
+          className="sheet-rise flex flex-col gap-3 sm:max-h-[70vh] max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:z-50 max-sm:h-[85dvh] max-sm:rounded-t-md max-sm:border-t max-sm:border-rule max-sm:bg-surface max-sm:p-4 max-sm:shadow-[0_16px_32px_-20px_rgb(0_0_0/.45)] [&[hidden]]:hidden"
+        >
+          <div className="flex items-center justify-between sm:hidden">
+            <p className="font-mono text-xs tracking-[0.06em] text-ink-2 uppercase">
+              {t(lang, "tabs.chat")}
+            </p>
+            <button
+              type="button"
+              onClick={closeSheet}
+              className="min-h-11 rounded-sm border border-rule px-4 text-sm font-medium"
+            >
+              {t(lang, "chat.close")}
+            </button>
+          </div>
+          <ChatPanel
+            lang={lang}
+            chat={chat}
+            suggestions={suggestions(lang, scan.result.detections)}
+            source
           />
         </div>
         <div

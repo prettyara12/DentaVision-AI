@@ -124,7 +124,7 @@ Hasil spike M1 (2026-10-25, #7): pada 5 panoramik contoh, heatmap P3 jatuh di da
 | `POST` | `/api/scans/import` | Simpan hasil tamu (US-10) |
 | `DELETE` | `/api/scans/[id]` | Hapus scan + file Storage + chat terkait |
 | `POST` | `/api/insight` | Stream insight untuk daftar temuan; bila `scan_id` ada, simpan hasil akhir (M4). Body JSON `{ locale, detections }` (≤ 64 KB, ≤ 500 deteksi, skema sama dengan `/v1/analyze`), tanpa gambar. Respons NDJSON: `{type:"partial", insight}` berulang (JSON parsial dari stream Gemini, kartu hanya untuk `class_key` yang ada di konteks, urutan dari kode), lalu `{type:"done", insight}` (tervalidasi Zod) atau `{type:"error"}`. Error request: 411, 413, 400 `invalid_request` |
-| `POST` | `/api/chat` | Stream jawaban chat (per scan / umum) |
+| `POST` | `/api/chat` | Stream jawaban chat (per scan / umum). Body JSON `{ locale, messages, scan? }` (≤ 256 KB): `messages` = riwayat `{role:"user"|"model", text}` (1–100, user ≤ 2.000 karakter, model ≤ 4.000), `scan` = `{ detections, insightSummary? }` untuk chat per scan, tanpa gambar. Server memakai 20 pesan terakhir yang dimulai giliran `user` dan wajib diakhiri pertanyaan `user`. Respons NDJSON: `{type:"delta", text}` berulang, lalu `{type:"done"}` atau `{type:"error"}`. Error request: 411, 413, 400 `invalid_request` |
 | `DELETE` | `/api/chats/[id]` | Hapus chat |
 | `DELETE` | `/api/account` | Hapus akun + semua data |
 | `GET` | `/api/health` | Teruskan status API inferensi (untuk state `waking`): `ready`, `loading`, `error`, atau `waking` (Space tidur/tidak menjawab dalam 3 detik) |
@@ -134,6 +134,7 @@ Setiap handler: autentikasi (opsional untuk tamu) → otorisasi kepemilikan → 
 **`POST /api/scans`**, `multipart/form-data` dengan `image` (JPEG/PNG terkompres) dan `locale` (`id`/`en`, default `id`).
 
 - Ditolak sebelum stream dimulai, dengan JSON `{ "code": ... }`: `411 length_required` (tanpa `Content-Length` yang valid, ditolak sebelum body dibaca), `400 invalid_request` (tanpa `image`), `413 too_large` (body/gambar > 4 MB), `415 unsupported_type` (magic bytes bukan JPEG/PNG). Dimensi diperiksa API inferensi (≤ 25 M piksel).
+- Batas byte `/api/scans`, `/api/insight`, dan `/api/chat` ditegakkan pada byte yang benar-benar dibaca (`web/src/lib/body.ts`), bukan hanya dari header, jadi `Content-Length` yang dipalsukan kecil tetap berakhir 413.
 - Selain itu respons `200` `application/x-ndjson`, satu objek per baris, sesuai urutan tahap di server:
 
   ```json
