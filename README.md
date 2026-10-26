@@ -137,7 +137,7 @@ npm test
 npm run build
 ```
 
-Eval prompt (memanggil Gemini sungguhan, tidak dijalankan CI): `npm run eval:insight` (6 request) dan `npm run eval:chat` (5 request). Jalankan saat prompt berubah dan catat hasilnya di PR.
+Eval prompt (memanggil Gemini sungguhan, tidak dijalankan CI): `npm run eval:insight` (6 request) dan `npm run eval:chat` (8 request). Jalankan saat prompt berubah dan catat hasilnya di PR.
 
 API (dari folder `api`):
 
