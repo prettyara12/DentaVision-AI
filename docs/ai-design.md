@@ -37,10 +37,12 @@ Dibuat di kode dari `detections` dengan `confidence ≥ 0.25`. Tidak ada gambar.
 
 ```text
 Findings (model: yolov8m-resnet50, recall ~0.39, may miss findings):
-- [attention] Caries, 3 boxes, max confidence 0.71, areas: lower-left, lower-right
-- [treatment] Filling, 2 boxes, max confidence 0.88, areas: upper-right
+- [attention] Caries (key: caries), 3 boxes, max confidence 0.71, areas: lower-left, lower-right
+- [treatment] Filling (key: filling), 2 boxes, max confidence 0.88, areas: upper-right
 - [anatomy] Permanent Teeth (hidden from user by default)
 ```
+
+Tanpa temuan ≥ 0,25, daftar berisi satu baris `- none at confidence >= 0.25`. `key` dari class catalog dipakai LLM untuk mengisi `class_key`. Konteks dikirim sebagai giliran `user` (data buatan kode), bukan di system prompt. Implementasi: `web/src/features/insight/insight.ts` (`findingsContext`).
 
 - Kelompok (`attention` / `treatment` / `anatomy`) dari [class-catalog.md](class-catalog.md).
 - **Area** = kuadran kasar dari titik tengah box. Pada panoramik, sisi kiri gambar = sisi kanan pasien. `y < 0.5` = rahang atas. Ini perkiraan; prompt melarang menyebut nomor gigi.
@@ -74,9 +76,10 @@ Rules:
 - Say "the AI marked" or "may indicate". Never say the person has a disease.
 - Do not mention tooth numbers. Use only the areas given.
 - Do not give medication, dosage, or treatment plans.
-- If there are no attention findings, say the AI did not mark anything that needs attention,
-  and that the detector misses findings often, so routine checkups still matter.
-- No greetings, no filler, no emojis.
+- If there are no attention findings, the summary must say both: the AI did not mark anything
+  that needs attention, and the detector often misses findings, so routine dental checkups still matter.
+- No greetings, no filler, no emojis. No disclaimer: the app shows its own.
+- findings: one entry per attention or treatment class, class_key copied from the list.
 Return JSON matching the schema.
 ```
 
@@ -110,10 +113,13 @@ Rules:
 
 ## 6. Eval
 
-`web/tests/fixtures/insight/*.json`: 6 daftar temuan (kosong, hanya anatomi, satu caries, banyak kelas campuran, confidence rendah, kelas jarang). Skrip `npm run eval:insight` memanggil Gemini sungguhan dan mengecek:
+`web/tests/fixtures/insight/*.json`: 6 daftar temuan (kosong, hanya anatomi, satu caries, banyak kelas campuran, confidence rendah, kelas jarang), campuran ID/EN. Skrip `npm run eval:insight` (`web/tests/eval/insight.eval.ts`, Vitest dengan config terpisah, membaca `web/.env.local`) memanggil Gemini sungguhan dan mengecek:
 
 - JSON valid sesuai skema;
-- tidak menyebut nomor gigi (regex `\b[1-4][1-8]\b`) atau kata "you have";
-- kasus kosong menyebut keterbatasan model.
+- tidak menyebut nomor gigi (regex `\b[1-4][1-8]\b`) atau kata "you have" (ID: "Anda menderita/mengidap");
+- `class_key` hanya kelas yang ada di konteks;
+- kasus tanpa temuan perhatian menyebut keterbatasan model (EN: `miss|routine`, ID: `melewatkan|terlewat|rutin`).
+
+Halaman hasil juga menampilkan kalimat keterbatasan model dari kode saat tidak ada temuan perhatian, jadi aturan ini tidak hanya bergantung pada LLM.
 
 Dijalankan manual saat prompt berubah. Hasil dicatat di PR.

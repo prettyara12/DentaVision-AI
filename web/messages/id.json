@@ -48,5 +48,14 @@
   "heatmap.how": "Area terang adalah bagian gambar yang paling memengaruhi AI saat menandai {name}. Heatmap menunjukkan perhatian model, bukan batas pasti kondisi.",
   "sample.title": "Coba contoh",
   "sample.credit": "Gambar contoh: {credit}, lisensi",
-  "sample.loading": "Membuka contoh"
+  "sample.loading": "Membuka contoh",
+  "tabs.label": "Hasil",
+  "tabs.findings": "Temuan",
+  "tabs.summary": "Ringkasan",
+  "insight.loading": "AI sedang menyusun ringkasan",
+  "insight.unavailable": "Ringkasan AI sedang tidak tersedia. Hasil deteksi tetap bisa dipakai.",
+  "insight.what_to_do": "Yang bisa dilakukan",
+  "insight.questions": "Pertanyaan untuk dokter gigi",
+  "insight.regenerate": "Buat ulang dalam Bahasa Indonesia",
+  "insight.source": "Ditulis Gemini dari daftar temuan, tanpa melihat gambar."
 }

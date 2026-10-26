@@ -48,5 +48,14 @@
   "heatmap.how": "Bright areas are the parts of the image that most influenced the AI when it marked {name}. The heatmap shows where the model looked, not the exact edge of a condition.",
   "sample.title": "Try a sample",
   "sample.credit": "Sample image: {credit}, licensed",
-  "sample.loading": "Opening sample"
+  "sample.loading": "Opening sample",
+  "tabs.label": "Result",
+  "tabs.findings": "Findings",
+  "tabs.summary": "Summary",
+  "insight.loading": "The AI is writing a summary",
+  "insight.unavailable": "The AI summary is not available right now. The detection results still work.",
+  "insight.what_to_do": "What you can do",
+  "insight.questions": "Questions for your dentist",
+  "insight.regenerate": "Regenerate in English",
+  "insight.source": "Written by Gemini from the findings list, without seeing the image."
 }
