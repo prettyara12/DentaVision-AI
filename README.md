@@ -12,7 +12,7 @@ Upload X-ray panoramik gigi, lalu lihat apa yang ditandai AI: 31 jenis temuan de
 | M1 API inferensi (`/v1/analyze`, Grad-CAM P3, Dockerfile HF Space) | Selesai. Deploy Space dilakukan manual ([architecture §3.4](docs/architecture.md#34-deploy)) |
 | M2 Web scan & hasil | Berjalan: upload + validasi Gemini (#9), viewer & daftar temuan (#10), heatmap (#11), gambar contoh (#12). Menunggu review penjelasan 31 kelas oleh pemilik repo |
 | M3 Gemini | Selesai: insight streaming (#13), chat per scan + chat umum `/chat` (#14). Keputusan `GEMINI_FALLBACK_MODEL` masih terbuka ([roadmap](docs/roadmap.md#keputusan-yang-masih-terbuka)) |
-| M4 Akun & riwayat | Berjalan: tabel, RLS, kuota atomik, bucket `scans` (#15) |
+| M4 Akun & riwayat | Berjalan: tabel, RLS, kuota atomik, bucket `scans` (#15), login Google & email (#16) |
 | M5 | Belum dimulai ([roadmap](docs/roadmap.md)) |
 
 Belum ada deploy production.
@@ -86,10 +86,22 @@ Perintah di bawah untuk **Windows PowerShell**, dijalankan dari folder root proy
      .venv\Scripts\python -c "import secrets; print(secrets.token_hex(24))"
      ```
 
-   - Variabel Supabase baru dipakai di M4, tetapi harus terisi karena semua env divalidasi sekaligus. Untuk sekarang cukup `NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321` dan nilai sembarang untuk dua key Supabase.
+   - Supabase: tanpa login, cukup `NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321` dan nilai sembarang untuk dua key Supabase (semua env divalidasi sekaligus). Untuk menguji login, isi URL + key project hosted (Project Settings → API) atau Supabase lokal (`supabase start`), lalu atur Auth di bawah.
    - Biarkan `GEMINI_FALLBACK_MODEL` dikomentari bila tidak dipakai; nilai kosong membuat validasi env gagal.
 
    Daftar lengkap env: [docs/architecture.md §6](docs/architecture.md#6-environment). Jangan commit `.env.local`.
+
+### Auth Supabase (sekali per project hosted)
+
+Dilakukan pemilik project di dashboard Supabase, bukan lewat kode:
+
+1. **Authentication → URL Configuration**: *Site URL* `http://localhost:3000` (diganti domain production saat deploy). Tambahkan `http://localhost:3000/auth/callback` ke *Redirect URLs*.
+2. **Authentication → Providers → Email**: biarkan *Confirm email* aktif (verifikasi email, US-08).
+3. **Google** (opsional untuk dev; tanpa ini tombol Google menampilkan pesan "tidak tersedia"):
+   - Di Google Cloud Console → APIs & Services → Credentials, buat *OAuth client ID* tipe *Web application*. *Authorized redirect URI*: `https://<project-ref>.supabase.co/auth/v1/callback`.
+   - Salin *Client ID* dan *Client secret* ke **Authentication → Providers → Google** di Supabase, lalu aktifkan.
+
+Tautan verifikasi dan reset harus dibuka di browser yang sama dengan tempat formulir diisi (PKCE).
 
 ### Menjalankan (2 terminal)
 
