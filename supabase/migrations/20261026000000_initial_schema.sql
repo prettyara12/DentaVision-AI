@@ -21,7 +21,8 @@ create table public.scans (
   image_height int not null check (image_height > 0),
   model_version text not null,
   detections jsonb not null check (jsonb_typeof(detections) = 'array'),
-  heatmap_class_ids smallint[] not null,
+  heatmap_class_ids smallint[] not null
+    check (0 <= all (heatmap_class_ids) and 30 >= all (heatmap_class_ids)), -- class ids 0..30 (class-catalog)
   insight jsonb,
   insight_locale text check (insight_locale in ('id', 'en')),
   insight_prompt_version text,
@@ -188,13 +189,22 @@ create trigger on_chat_message_created
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('scans', 'scans', false, 5242880, array['image/jpeg', 'image/png']);
 
--- Objects live under `{user_id}/{scan_id}/…`; users only reach their own prefix.
+-- Only the canonical paths of docs/architecture.md §5.2, under the user's own prefix:
+-- `{user_id}/{scan_id}/original.jpg` and `{user_id}/{scan_id}/heatmap-{0..30}.png`.
+create function public.is_own_scan_object(name text)
+returns boolean
+language sql
+stable
+set search_path = ''
+as $$
+  select name ~ ('^' || (select auth.uid())::text
+                 || '/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/'
+                 || '(original\.jpg|heatmap-([0-9]|[12][0-9]|30)\.png)$');
+$$;
+
 create policy "scans bucket: owner reads" on storage.objects
-  for select to authenticated
-  using (bucket_id = 'scans' and (storage.foldername(name))[1] = (select auth.uid())::text);
+  for select to authenticated using (bucket_id = 'scans' and public.is_own_scan_object(name));
 create policy "scans bucket: owner uploads" on storage.objects
-  for insert to authenticated
-  with check (bucket_id = 'scans' and (storage.foldername(name))[1] = (select auth.uid())::text);
+  for insert to authenticated with check (bucket_id = 'scans' and public.is_own_scan_object(name));
 create policy "scans bucket: owner deletes" on storage.objects
-  for delete to authenticated
-  using (bucket_id = 'scans' and (storage.foldername(name))[1] = (select auth.uid())::text);
+  for delete to authenticated using (bucket_id = 'scans' and public.is_own_scan_object(name));

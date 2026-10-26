@@ -182,7 +182,7 @@ scans (
   image_height int not null,
   model_version text not null,
   detections jsonb not null,         -- array dari respons /v1/analyze
-  heatmap_class_ids smallint[] not null,
+  heatmap_class_ids smallint[] not null, -- tiap id 0..30 (check)
   insight jsonb,                     -- output tervalidasi, lihat ai-design §3
   insight_locale text,
   insight_prompt_version text,
@@ -234,7 +234,7 @@ Implementasi: `supabase/migrations/20261026000000_initial_schema.sql`. Tes: `sup
 ### 5.2 Storage
 
 - Bucket `scans`, **privat**, maks 5 MB per objek, hanya `image/jpeg` / `image/png`. Path `{user_id}/{scan_id}/original.jpg` dan `{user_id}/{scan_id}/heatmap-{class_id}.png`.
-- Policy: user hanya bisa membaca/menulis/menghapus objek dengan prefix `{auth.uid()}/`.
+- Policy: user hanya bisa membaca/menulis/menghapus objek dengan path kanonis di bawah prefix `{auth.uid()}/` (`{scan_id}/original.jpg` atau `{scan_id}/heatmap-{0..30}.png`, lewat `public.is_own_scan_object`). Nama lain ditolak.
 - Browser membaca lewat signed URL (berlaku 1 jam) dari server.
 - Hapus scan/akun menghapus objek Storage lebih dulu, baru baris DB. Kalau hapus Storage gagal, baris DB tidak dihapus dan user mendapat error.
 

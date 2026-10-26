@@ -1,7 +1,7 @@
 -- RLS per table (docs/architecture.md §5.1), the profile trigger, and cascade on account delete.
 -- Synthetic users only: A = 1111…, B = 2222….
 begin;
-select plan(31);
+select plan(32);
 
 insert into auth.users (id, email, raw_user_meta_data) values
   ('11111111-1111-1111-1111-111111111111', 'a@example.test', '{"full_name": "Pasien A"}'),
@@ -50,6 +50,12 @@ select throws_ok($$
           '22222222-2222-2222-2222-222222222222/bbbbbbbb-0000-0000-0000-000000000001/original.jpg',
           2000, 1000, 'test', '[]', '{}', 'upload')
 $$, '23514', null, 'scans: image_path must sit under the row''s own prefix');
+select throws_ok($$
+  insert into public.scans (id, user_id, image_path, image_width, image_height, model_version, detections, heatmap_class_ids, source)
+  values ('aaaaaaaa-0000-0000-0000-000000000004', '11111111-1111-1111-1111-111111111111',
+          '11111111-1111-1111-1111-111111111111/aaaaaaaa-0000-0000-0000-000000000004/original.jpg',
+          2000, 1000, 'test', '[]', '{31}', 'upload')
+$$, '23514', null, 'scans: heatmap class ids stay within 0..30');
 select is((select count(*)::int from public.scans), 1, 'scans: a user sees only their own');
 select throws_ok($$update public.scans set model_version = 'x'$$, '42501', null, 'scans: users cannot update (insight is written by the service role)');
 select lives_ok($$delete from public.scans where id = 'bbbbbbbb-0000-0000-0000-000000000001'$$, 'scans: deleting another user''s scan runs');
