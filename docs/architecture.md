@@ -177,12 +177,12 @@ scans (
   id uuid pk default gen_random_uuid(),
   user_id uuid not null references auth.users on delete cascade,
   created_at timestamptz default now(),
-  image_path text not null,          -- scans/{user_id}/{id}/original.jpg
+  image_path text not null,          -- {user_id}/{id}/original.jpg di bucket `scans` (check constraint)
   image_width int not null,
   image_height int not null,
   model_version text not null,
   detections jsonb not null,         -- array dari respons /v1/analyze
-  heatmap_class_ids smallint[] not null,
+  heatmap_class_ids smallint[] not null, -- tiap id 0..30 (check)
   insight jsonb,                     -- output tervalidasi, lihat ai-design §3
   insight_locale text,
   insight_prompt_version text,
@@ -217,7 +217,9 @@ usage_counters (
 
 Fungsi `consume_quota(subject text, kind text, max int) returns boolean`: `insert ... on conflict do update set count = count + 1 where count < max`, atomik. `security definer`, hanya bisa dieksekusi `service_role`.
 
-Trigger `on auth.users insert` → buat `profiles`.
+Trigger `on auth.users insert` → buat `profiles` (`display_name` dari metadata `full_name`/`name`, mis. Google). Trigger `on chat_messages insert` → `chats.updated_at = now()`.
+
+Implementasi: `supabase/migrations/20261026000000_initial_schema.sql`. Tes: `supabase/tests/` (RLS per tabel + cascade, kuota, Storage).
 
 ### 5.1 RLS
 
@@ -231,8 +233,8 @@ Trigger `on auth.users insert` → buat `profiles`.
 
 ### 5.2 Storage
 
-- Bucket `scans`, **privat**. Path `{user_id}/{scan_id}/original.jpg` dan `{user_id}/{scan_id}/heatmap-{class_id}.png`.
-- Policy: user hanya bisa membaca/menulis/menghapus objek dengan prefix `{auth.uid()}/`.
+- Bucket `scans`, **privat**, maks 5 MB per objek, hanya `image/jpeg` / `image/png`. Path `{user_id}/{scan_id}/original.jpg` dan `{user_id}/{scan_id}/heatmap-{class_id}.png`.
+- Policy: user hanya bisa membaca/menulis/menghapus objek dengan path kanonis di bawah prefix `{auth.uid()}/` (`{scan_id}/original.jpg` atau `{scan_id}/heatmap-{0..30}.png`, lewat `public.is_own_scan_object`). Nama lain ditolak.
 - Browser membaca lewat signed URL (berlaku 1 jam) dari server.
 - Hapus scan/akun menghapus objek Storage lebih dulu, baru baris DB. Kalau hapus Storage gagal, baris DB tidak dihapus dan user mendapat error.
 
