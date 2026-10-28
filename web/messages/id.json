@@ -23,6 +23,7 @@
   "error.unavailable": "Server analisis tidak merespons. Coba lagi beberapa saat lagi.",
   "error.too_large": "Gambar terlalu besar setelah dikompres. Coba gambar lain.",
   "error.unsupported_type": "Server tidak bisa membaca gambar ini. Coba file JPG atau PNG lain.",
+  "error.quota_exceeded": "Batas kuota scan harian Anda sudah tercapai. Coba lagi besok.",
   "error.storage": "Hasil tidak bisa disimpan di tab ini. Tutup tab lain atau coba browser lain.",
   "action.retry": "Coba lagi",
   "action.another": "Pilih gambar lain",
@@ -30,6 +31,9 @@
   "result.low_quality": "Resolusi gambar rendah, temuan bisa terlewat.",
   "result.empty": "Belum ada hasil scan di tab ini.",
   "result.new_scan": "Upload X-ray",
+  "result.save_to_history": "Simpan ke riwayat",
+  "result.saving_to_history": "Menyimpan hasil ke akun Anda...",
+  "result.save_error": "Gagal menyimpan hasil scan ke akun. Coba lagi.",
   "findings.title": "Temuan",
   "findings.none_attention": "Tidak ada temuan yang perlu perhatian.",
   "findings.limits": "Model sering melewatkan temuan, jadi hasil ini tidak menggantikan pemeriksaan dokter gigi.",
@@ -141,5 +145,9 @@
   "settings.deleting": "Menghapus...",
   "common.cancel": "Batal",
   "common.delete": "Hapus",
-  "common.deleting": "Menghapus..."
+  "common.deleting": "Menghapus...",
+  "quota.notice.title": "Batas kuota harian tercapai",
+  "quota.notice.desc": "Kuota Anda akan diatur ulang pada pukul 00:00 WITA ({timeRemaining} lagi).",
+  "quota.notice.guest_hint": "Masuk untuk mendapatkan kuota lebih banyak: hingga 20 scan dan 100 chat setiap hari.",
+  "quota.notice.login_cta": "Masuk ke Akun"
 }

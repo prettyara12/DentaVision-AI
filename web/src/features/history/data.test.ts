@@ -10,6 +10,7 @@ import {
   getScanDetail,
   getUserChats,
   getUserScans,
+  saveScanImport,
   saveScanUpload,
 } from "./data";
 
@@ -157,6 +158,112 @@ describe("History Data Operations", () => {
 
       // Should have cleaned up the original image
       expect(removeMock).toHaveBeenCalledWith([`${userId}/${scanId}/original.jpg`]);
+    });
+  });
+
+  describe("saveScanImport", () => {
+    it("successfully uploads images and creates scan with source: import, insight, and chat", async () => {
+      const uploadMock = vi.fn().mockResolvedValue({ data: { path: "ok" }, error: null });
+      const insertScanMock = vi.fn().mockResolvedValue({ error: null });
+      const insertChatMock = vi.fn().mockReturnValue({
+        select: () => ({
+          single: vi.fn().mockResolvedValue({ data: { id: "chat-imported-1" }, error: null }),
+        }),
+      });
+      const insertMsgMock = vi.fn().mockResolvedValue({ data: null, error: null });
+
+      const supabaseMock = {
+        storage: {
+          from: vi.fn(() => ({ upload: uploadMock })),
+        },
+        from: vi.fn((table: string) => {
+          if (table === "scans") return { insert: insertScanMock };
+          if (table === "chats") return { insert: insertChatMock };
+          if (table === "chat_messages") return { insert: insertMsgMock };
+          return {};
+        }),
+      } as unknown as SupabaseClient<Database>;
+
+      const imageBytes = Buffer.from([10, 20, 30]);
+      const sampleInsight = {
+        locale: "id" as const,
+        version: "v1",
+        data: {
+          summary: "Ringkasan temuan.",
+          findings: [],
+          questions_for_dentist: ["Pertanyaan 1"],
+        },
+      };
+      const sampleChat = [
+        { role: "user" as const, text: "Halo AI" },
+        { role: "model" as const, text: "Halo, ada yang bisa dibantu?" },
+      ];
+
+      await saveScanImport(supabaseMock, userId, scanId, {
+        imageBytes,
+        result: sampleResult,
+        insight: sampleInsight,
+        chat: sampleChat,
+      });
+
+      expect(uploadMock).toHaveBeenCalledWith(
+        `${userId}/${scanId}/original.jpg`,
+        imageBytes,
+        expect.objectContaining({ contentType: "image/jpeg", upsert: true }),
+      );
+
+      expect(insertScanMock).toHaveBeenCalledWith({
+        id: scanId,
+        user_id: userId,
+        image_path: `${userId}/${scanId}/original.jpg`,
+        image_width: 1024,
+        image_height: 512,
+        model_version: "yolov8m-dentavision-v1.0",
+        detections: sampleResult.detections,
+        heatmap_class_ids: [0],
+        insight: sampleInsight.data,
+        insight_locale: "id",
+        insight_prompt_version: "v1",
+        source: "import",
+      });
+
+      expect(insertChatMock).toHaveBeenCalledWith({
+        user_id: userId,
+        scan_id: scanId,
+        title: "Chat Scan",
+      });
+
+      expect(insertMsgMock).toHaveBeenCalledWith([
+        { chat_id: "chat-imported-1", role: "user", content: "Halo AI" },
+        { chat_id: "chat-imported-1", role: "model", content: "Halo, ada yang bisa dibantu?" },
+      ]);
+    });
+
+    it("cleans up storage objects if scan database insert fails", async () => {
+      const uploadMock = vi.fn().mockResolvedValue({ data: { path: "ok" }, error: null });
+      const removeMock = vi.fn().mockResolvedValue({ data: [], error: null });
+      const insertScanMock = vi.fn().mockResolvedValue({
+        error: new Error("DB scan insert error"),
+      });
+
+      const supabaseMock = {
+        storage: {
+          from: vi.fn(() => ({ upload: uploadMock, remove: removeMock })),
+        },
+        from: vi.fn(() => ({ insert: insertScanMock })),
+      } as unknown as SupabaseClient<Database>;
+
+      await expect(
+        saveScanImport(supabaseMock, userId, scanId, {
+          imageBytes: Buffer.from([1]),
+          result: sampleResult,
+        }),
+      ).rejects.toThrow(/Failed to insert scan record/);
+
+      expect(removeMock).toHaveBeenCalledWith([
+        `${userId}/${scanId}/original.jpg`,
+        `${userId}/${scanId}/heatmap-0.png`,
+      ]);
     });
   });
 

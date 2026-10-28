@@ -5,11 +5,29 @@ import { readLines } from "@/features/scan/upload";
 const streamChat = vi.hoisted(() => vi.fn());
 const currentUser = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 const createClient = vi.hoisted(() => vi.fn());
+const consumeQuota = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ ok: true, limit: 20, resetInSeconds: 3600 }),
+);
+const getQuotaSubject = vi.hoisted(() =>
+  vi.fn().mockReturnValue({ subject: "ip:test", role: "guest" }),
+);
+const getQuotaLimit = vi.hoisted(() => vi.fn().mockReturnValue(20));
+const quotaHeaders = vi.hoisted(() => vi.fn().mockReturnValue({ "RateLimit-Limit": "20" }));
+const createAdminClient = vi.hoisted(() => vi.fn().mockReturnValue({}));
 
 vi.mock("@/lib/gemini", () => ({ streamChat }));
 vi.mock("@/lib/supabase/server", () => ({
   currentUser,
   createClient,
+}));
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient,
+}));
+vi.mock("@/lib/quota", () => ({
+  consumeQuota,
+  getQuotaSubject,
+  getQuotaLimit,
+  quotaHeaders,
 }));
 
 const { POST } = await import("./route");
@@ -46,6 +64,7 @@ beforeEach(() => {
   streamChat.mockReset();
   currentUser.mockReset().mockResolvedValue(null);
   createClient.mockReset();
+  consumeQuota.mockReset().mockResolvedValue({ ok: true, limit: 20, resetInSeconds: 3600 });
 });
 
 describe("POST /api/chat", () => {
@@ -256,6 +275,7 @@ describe("POST /api/chat", () => {
 
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({ code: "not_found" });
+    expect(consumeQuota).not.toHaveBeenCalled();
     expect(streamChat).not.toHaveBeenCalled();
   });
 
@@ -339,6 +359,7 @@ describe("POST /api/chat", () => {
 
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({ code: "not_found" });
+    expect(consumeQuota).not.toHaveBeenCalled();
     expect(streamChat).not.toHaveBeenCalled();
   });
 
@@ -386,5 +407,26 @@ describe("POST /api/chat", () => {
     // Should have deltas, then terminate with error event instead of done
     expect(receivedEvents.some((e) => e.type === "delta")).toBe(true);
     expect(receivedEvents.at(-1)).toEqual({ type: "error" });
+  });
+
+  it("returns 429 when consumeQuota reports quota exceeded", async () => {
+    consumeQuota.mockResolvedValueOnce({
+      ok: false,
+      limit: 20,
+      resetInSeconds: 1200,
+    });
+
+    const response = await post({
+      locale: "id",
+      messages: [question],
+    });
+
+    expect(response.status).toBe(429);
+    expect(await response.json()).toEqual({
+      code: "quota_exceeded",
+      resetInSeconds: 1200,
+      role: "guest",
+    });
+    expect(streamChat).not.toHaveBeenCalled();
   });
 });

@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import { ResultWorkspace } from "@/features/scan/result-workspace";
-import { isLocale, t } from "@/lib/i18n";
+import { isLocale, t, type Locale } from "@/lib/i18n";
+import { currentUser } from "@/lib/supabase/server";
 
 export async function generateMetadata({
   params,
@@ -20,11 +22,18 @@ export default async function ScanResultPage({ params }: PageProps<"/[lang]/scan
         <h1 className="text-[32px] leading-tight font-semibold tracking-[-0.02em] sm:text-[44px]">
           {t(lang, "result.title")}
         </h1>
-        <ResultWorkspace lang={lang} />
+        <Suspense fallback={<ResultWorkspace lang={lang} userLoggedIn={false} />}>
+          <ScanResultContent lang={lang} />
+        </Suspense>
         <p className="border-t border-rule pt-4 text-sm text-ink-2">
           {t(lang, "disclaimer.short")}
         </p>
       </main>
     </div>
   );
+}
+
+async function ScanResultContent({ lang }: { lang: Locale }) {
+  const user = await currentUser();
+  return <ResultWorkspace lang={lang} userLoggedIn={Boolean(user)} />;
 }

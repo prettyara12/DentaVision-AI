@@ -1,7 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, useSyncExternalStore, type KeyboardEvent } from "react";
+import { useRouter } from "next/navigation";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type KeyboardEvent,
+} from "react";
 import { suggestions } from "@/features/chat/chat";
 import { ChatPanel } from "@/features/chat/chat-panel";
 import { useChat } from "@/features/chat/use-chat";
@@ -33,7 +42,21 @@ function readStoredScan(): string | null {
   }
 }
 
-export function ResultWorkspace({ lang, initialScan }: { lang: Locale; initialScan?: StoredScan }) {
+export const PENDING_IMPORT_KEY = "dentavision:pending_import";
+
+export function ResultWorkspace({
+  lang,
+  initialScan,
+  isSaved,
+  userLoggedIn,
+}: {
+  lang: Locale;
+  initialScan?: StoredScan;
+  isSaved?: boolean;
+  userLoggedIn?: boolean;
+}) {
+  const router = useRouter();
+  const isSavedScan = isSaved ?? Boolean(initialScan);
   const raw = useSyncExternalStore(noSubscribe, readStoredScan, () => null);
   const scan = useMemo(() => {
     if (initialScan) return initialScan;
@@ -45,6 +68,70 @@ export function ResultWorkspace({ lang, initialScan }: { lang: Locale; initialSc
       return null;
     }
   }, [initialScan, raw]);
+
+  const isImportingRef = useRef(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importError, setImportError] = useState(false);
+
+  const executeImport = useCallback(async () => {
+    if (!userLoggedIn || isSavedScan || !scan || isImportingRef.current) return;
+    let pending = false;
+    try {
+      pending = sessionStorage.getItem(PENDING_IMPORT_KEY) === "true";
+    } catch {
+      pending = false;
+    }
+    if (!pending) return;
+
+    isImportingRef.current = true;
+    await Promise.resolve();
+    setIsImporting(true);
+    setImportError(false);
+
+    try {
+      const response = await fetch("/api/scans/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image: scan.image,
+          result: scan.result,
+          insight: scan.insight,
+          chat: scan.chat,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Import failed");
+      const data = (await response.json()) as { scanId: string };
+
+      try {
+        sessionStorage.removeItem(PENDING_IMPORT_KEY);
+        sessionStorage.removeItem(SCAN_STORAGE_KEY);
+      } catch {}
+
+      router.push(`/${lang}/scans/${data.scanId}`);
+    } catch {
+      isImportingRef.current = false;
+      setIsImporting(false);
+      setImportError(true);
+    }
+  }, [userLoggedIn, isSavedScan, scan, lang, router]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void executeImport();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [executeImport]);
+
+  if (isImporting) {
+    return (
+      <div className="flex flex-col items-start gap-4">
+        <p role="status" className="text-sm text-ink-2">
+          {t(lang, "result.saving_to_history")}
+        </p>
+      </div>
+    );
+  }
 
   if (!scan) {
     return (
@@ -60,7 +147,17 @@ export function ResultWorkspace({ lang, initialScan }: { lang: Locale; initialSc
     );
   }
   // A new scan in this tab starts a fresh workspace (filters, insight, chat).
-  return <Workspace key={scan.image} lang={lang} scan={scan} />;
+  return (
+    <Workspace
+      key={scan.image}
+      lang={lang}
+      scan={scan}
+      userLoggedIn={userLoggedIn}
+      isSaved={isSavedScan}
+      importError={importError}
+      onRetryImport={() => void executeImport()}
+    />
+  );
 }
 
 const TABS = ["findings", "summary", "chat"] as const;
@@ -79,7 +176,22 @@ function onTabKey(event: KeyboardEvent, current: Tab, select: (tab: Tab) => void
 const PHONE = "(max-width: 639px)";
 const isPhone = () => window.matchMedia(PHONE).matches;
 
-function Workspace({ lang, scan }: { lang: Locale; scan: StoredScan }) {
+function Workspace({
+  lang,
+  scan,
+  userLoggedIn,
+  isSaved,
+  importError,
+  onRetryImport,
+}: {
+  lang: Locale;
+  scan: StoredScan;
+  userLoggedIn?: boolean;
+  isSaved?: boolean;
+  importError?: boolean;
+  onRetryImport?: () => void;
+}) {
+  const router = useRouter();
   const [minConfidence, setMinConfidence] = useState(DEFAULT_MIN_CONFIDENCE);
   const [visible, setVisible] = useState(
     () =>
@@ -187,6 +299,39 @@ function Workspace({ lang, scan }: { lang: Locale; scan: StoredScan }) {
         />
       </div>
       <section className="flex flex-col gap-6 lg:col-span-4">
+        {importError && (
+          <div className="flex items-center justify-between gap-3 rounded-sm border border-rule bg-surface p-4">
+            <p role="alert" className="text-sm text-warn">
+              {t(lang, "result.save_error")}
+            </p>
+            {onRetryImport && (
+              <button
+                type="button"
+                onClick={onRetryImport}
+                className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-sm bg-accent px-4 text-sm font-medium text-accent-ink hover:opacity-90 focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 transition-opacity"
+              >
+                {t(lang, "action.retry")}
+              </button>
+            )}
+          </div>
+        )}
+        {!userLoggedIn && !scan.sample && !isSaved && (
+          <div className="flex flex-col gap-2 rounded-sm border border-rule bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-ink-2">{t(lang, "auth.login.lede")}</p>
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  sessionStorage.setItem(PENDING_IMPORT_KEY, "true");
+                } catch {}
+                router.push(`/${lang}/login?next=/${lang}/scan/result`);
+              }}
+              className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-sm bg-accent px-4 text-sm font-medium text-accent-ink hover:opacity-90 focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 transition-opacity"
+            >
+              {t(lang, "result.save_to_history")}
+            </button>
+          </div>
+        )}
         <div
           role="tablist"
           aria-label={t(lang, "tabs.label")}
