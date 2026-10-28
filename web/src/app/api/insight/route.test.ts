@@ -192,4 +192,52 @@ describe("POST /api/insight", () => {
     expect(await response.json()).toEqual({ code: "not_found" });
     expect(streamInsight).not.toHaveBeenCalled();
   });
+
+  it("reports error event when updating scan insight via createAdminClient fails", async () => {
+    const validScanId = "550e8400-e29b-41d4-a716-446655440000";
+    currentUser.mockResolvedValue({ id: "user-123", email: "user@test.com" });
+
+    const selectScanMock = vi.fn(() => ({
+      eq: () => ({
+        eq: () => ({
+          maybeSingle: vi.fn().mockResolvedValue({ data: { id: validScanId }, error: null }),
+        }),
+      }),
+    }));
+
+    const updateScanMock = vi.fn(() => ({
+      eq: () => ({
+        eq: vi
+          .fn()
+          .mockResolvedValue({ data: null, error: { message: "DB update connection lost" } }),
+      }),
+    }));
+
+    createClient.mockResolvedValue({
+      from: vi.fn((table: string) => {
+        if (table === "scans") return { select: selectScanMock };
+        return {};
+      }),
+    });
+
+    createAdminClient.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "scans") return { update: updateScanMock };
+        return {};
+      }),
+    });
+
+    const full = JSON.stringify(INSIGHT);
+    streamInsight.mockReturnValue(yieldAll(full));
+
+    const response = await post({
+      locale: "id",
+      detections: [caries],
+      scanId: validScanId,
+    });
+
+    expect(response.status).toBe(200);
+    const out = await events(response);
+    expect(out.at(-1)).toEqual({ type: "error" });
+  });
 });

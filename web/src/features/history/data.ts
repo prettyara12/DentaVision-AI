@@ -10,6 +10,8 @@ export type { OperationResult, UserScanSummary, UserChatSummary, ScanDetail };
 
 /**
  * Saves an uploaded scan to Storage and inserts the scan metadata row into database.
+ * If any step fails during upload or database insertion, any already uploaded Storage
+ * objects are cleaned up (best-effort rollback) to avoid leaving orphan files.
  */
 export async function saveScanUpload(
   supabase: SupabaseClient<Database>,
@@ -18,48 +20,62 @@ export async function saveScanUpload(
   imageBytes: Uint8Array | Buffer,
   result: AnalyzeResult,
 ): Promise<void> {
-  const originalPath = `${userId}/${scanId}/original.jpg`;
-  const { error: originalUploadError } = await supabase.storage
-    .from("scans")
-    .upload(originalPath, imageBytes, {
-      contentType: "image/jpeg",
-      upsert: true,
-    });
+  const uploadedPaths: string[] = [];
 
-  if (originalUploadError) {
-    throw new Error(`Failed to upload original scan image: ${originalUploadError.message}`);
-  }
-
-  for (const [classId, base64] of Object.entries(result.heatmaps)) {
-    const rawBase64 = base64.replace(/^data:image\/\w+;base64,/, "");
-    const buffer = Buffer.from(rawBase64, "base64");
-    const heatmapPath = `${userId}/${scanId}/heatmap-${classId}.png`;
-    const { error: heatmapUploadError } = await supabase.storage
+  try {
+    const originalPath = `${userId}/${scanId}/original.jpg`;
+    const { error: originalUploadError } = await supabase.storage
       .from("scans")
-      .upload(heatmapPath, buffer, {
-        contentType: "image/png",
+      .upload(originalPath, imageBytes, {
+        contentType: "image/jpeg",
         upsert: true,
       });
 
-    if (heatmapUploadError) {
-      throw new Error(`Failed to upload heatmap ${classId}: ${heatmapUploadError.message}`);
+    if (originalUploadError) {
+      throw new Error(`Failed to upload original scan image: ${originalUploadError.message}`);
     }
-  }
+    uploadedPaths.push(originalPath);
 
-  const { error: insertError } = await supabase.from("scans").insert({
-    id: scanId,
-    user_id: userId,
-    image_path: originalPath,
-    image_width: result.image.width,
-    image_height: result.image.height,
-    model_version: result.model_version,
-    detections: result.detections,
-    heatmap_class_ids: Object.keys(result.heatmaps).map(Number),
-    source: "upload",
-  });
+    for (const [classId, base64] of Object.entries(result.heatmaps)) {
+      const rawBase64 = base64.replace(/^data:image\/\w+;base64,/, "");
+      const buffer = Buffer.from(rawBase64, "base64");
+      const heatmapPath = `${userId}/${scanId}/heatmap-${classId}.png`;
+      const { error: heatmapUploadError } = await supabase.storage
+        .from("scans")
+        .upload(heatmapPath, buffer, {
+          contentType: "image/png",
+          upsert: true,
+        });
 
-  if (insertError) {
-    throw new Error(`Failed to insert scan record: ${insertError.message}`);
+      if (heatmapUploadError) {
+        throw new Error(`Failed to upload heatmap ${classId}: ${heatmapUploadError.message}`);
+      }
+      uploadedPaths.push(heatmapPath);
+    }
+
+    const { error: insertError } = await supabase.from("scans").insert({
+      id: scanId,
+      user_id: userId,
+      image_path: originalPath,
+      image_width: result.image.width,
+      image_height: result.image.height,
+      model_version: result.model_version,
+      detections: result.detections,
+      heatmap_class_ids: Object.keys(result.heatmaps).map(Number),
+      source: "upload",
+    });
+
+    if (insertError) {
+      throw new Error(`Failed to insert scan record: ${insertError.message}`);
+    }
+  } catch (error) {
+    if (uploadedPaths.length > 0) {
+      await supabase.storage
+        .from("scans")
+        .remove(uploadedPaths)
+        .catch(() => {});
+    }
+    throw error;
   }
 }
 
@@ -122,8 +138,55 @@ export async function deleteChat(
 }
 
 /**
+ * Helper to fetch all files and subfolders under a folder using paginated list requests.
+ */
+async function listAllInStorage(
+  storage: ReturnType<SupabaseClient<Database>["storage"]["from"]>,
+  folder: string,
+): Promise<{ files: string[]; subfolders: string[]; error?: string }> {
+  const PAGE_LIMIT = 100;
+  let offset = 0;
+  const files: string[] = [];
+  const subfolders: string[] = [];
+
+  while (true) {
+    const { data, error } = await storage.list(folder, {
+      limit: PAGE_LIMIT,
+      offset,
+    });
+
+    if (error) {
+      return { files: [], subfolders: [], error: error.message };
+    }
+    if (!data || data.length === 0) {
+      break;
+    }
+
+    for (const item of data) {
+      if (!item.name) continue;
+      const isFile =
+        item.name.includes(".") ||
+        (item.id !== null && item.metadata !== null && Boolean(item.metadata?.mimetype));
+      if (!isFile) {
+        subfolders.push(item.name);
+      } else {
+        files.push(folder ? `${folder}/${item.name}` : item.name);
+      }
+    }
+
+    if (data.length < PAGE_LIMIT) {
+      break;
+    }
+    offset += PAGE_LIMIT;
+  }
+
+  return { files, subfolders };
+}
+
+/**
  * Lists and removes all user scan files from Storage first, then deletes the auth user via adminClient.
- * If Storage removal fails, the user is NOT deleted.
+ * Storage objects are discovered recursively using paginated listings to ensure all scans and heatmaps
+ * across pages are cleaned up. If Storage removal fails, the user is NOT deleted.
  */
 export async function deleteAccount(
   adminClient: SupabaseClient<Database>,
@@ -131,39 +194,31 @@ export async function deleteAccount(
   userId: string,
 ): Promise<OperationResult> {
   const storage = supabase?.storage ?? adminClient?.storage;
+  const bucket = storage.from("scans");
 
-  const { data: topLevel, error: listError } = await storage.from("scans").list(userId);
-  if (listError) {
-    return { ok: false, error: listError.message };
+  const topLevel = await listAllInStorage(bucket, userId);
+  if (topLevel.error) {
+    return { ok: false, error: topLevel.error };
   }
 
-  const pathsToRemove: string[] = [];
+  const pathsToRemove: string[] = [...topLevel.files];
 
-  if (topLevel && topLevel.length > 0) {
-    for (const item of topLevel) {
-      if (!item.name) continue;
-      if (item.name.includes("/") || item.name.includes(".")) {
-        pathsToRemove.push(`${userId}/${item.name}`);
-      } else {
-        const { data: subFiles, error: subError } = await storage
-          .from("scans")
-          .list(`${userId}/${item.name}`);
-        if (subError) {
-          return { ok: false, error: subError.message };
-        }
-        if (subFiles && subFiles.length > 0) {
-          for (const sub of subFiles) {
-            pathsToRemove.push(`${userId}/${item.name}/${sub.name}`);
-          }
-        }
-      }
+  for (const subfolder of topLevel.subfolders) {
+    const subLevel = await listAllInStorage(bucket, `${userId}/${subfolder}`);
+    if (subLevel.error) {
+      return { ok: false, error: subLevel.error };
     }
+    pathsToRemove.push(...subLevel.files);
   }
 
   if (pathsToRemove.length > 0) {
-    const { error: removeError } = await storage.from("scans").remove(pathsToRemove);
-    if (removeError) {
-      return { ok: false, error: removeError.message };
+    const BATCH_SIZE = 100;
+    for (let i = 0; i < pathsToRemove.length; i += BATCH_SIZE) {
+      const batch = pathsToRemove.slice(i, i + BATCH_SIZE);
+      const { error: removeError } = await bucket.remove(batch);
+      if (removeError) {
+        return { ok: false, error: removeError.message };
+      }
     }
   }
 

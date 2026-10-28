@@ -104,15 +104,16 @@ describe("History Data Operations", () => {
       expect(insertMock).not.toHaveBeenCalled();
     });
 
-    it("throws error if database insert fails", async () => {
+    it("throws error if database insert fails and cleans up uploaded storage objects", async () => {
       const uploadMock = vi.fn().mockResolvedValue({ data: { path: "ok" }, error: null });
+      const removeMock = vi.fn().mockResolvedValue({ data: [], error: null });
       const insertMock = vi.fn().mockResolvedValue({
         error: new Error("Database connection failed"),
       });
 
       const supabaseMock = {
         storage: {
-          from: vi.fn(() => ({ upload: uploadMock })),
+          from: vi.fn(() => ({ upload: uploadMock, remove: removeMock })),
         },
         from: vi.fn(() => ({ insert: insertMock })),
       } as unknown as SupabaseClient<Database>;
@@ -120,6 +121,42 @@ describe("History Data Operations", () => {
       await expect(
         saveScanUpload(supabaseMock, userId, scanId, new Uint8Array([1]), sampleResult),
       ).rejects.toThrow(/Failed to insert scan record/);
+
+      expect(removeMock).toHaveBeenCalledWith([
+        `${userId}/${scanId}/original.jpg`,
+        `${userId}/${scanId}/heatmap-0.png`,
+      ]);
+    });
+
+    it("cleans up previously uploaded objects if a subsequent heatmap upload fails", async () => {
+      let callCount = 0;
+      const uploadMock = vi.fn().mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          // original image succeeds
+          return Promise.resolve({ data: { path: "ok" }, error: null });
+        }
+        // heatmap fails
+        return Promise.resolve({
+          data: null,
+          error: { message: "Storage network error on heatmap" },
+        });
+      });
+      const removeMock = vi.fn().mockResolvedValue({ data: [], error: null });
+
+      const supabaseMock = {
+        storage: {
+          from: vi.fn(() => ({ upload: uploadMock, remove: removeMock })),
+        },
+        from: vi.fn(() => ({ insert: vi.fn() })),
+      } as unknown as SupabaseClient<Database>;
+
+      await expect(
+        saveScanUpload(supabaseMock, userId, scanId, new Uint8Array([1]), sampleResult),
+      ).rejects.toThrow(/Failed to upload heatmap 0/);
+
+      // Should have cleaned up the original image
+      expect(removeMock).toHaveBeenCalledWith([`${userId}/${scanId}/original.jpg`]);
     });
   });
 
@@ -381,6 +418,52 @@ describe("History Data Operations", () => {
       expect(res.ok).toBe(false);
       expect(res.error).toBe("Storage list failed");
       expect(deleteUserMock).not.toHaveBeenCalled();
+    });
+
+    it("paginates multi-page storage listings and removes objects in batches before deleting user", async () => {
+      // Mock 120 scans across 2 pages at top-level
+      const page1 = Array.from({ length: 100 }, (_, i) => ({ name: `scan-page1-${i}` }));
+      const page2 = Array.from({ length: 20 }, (_, i) => ({ name: `scan-page2-${i}` }));
+
+      const listMock = vi
+        .fn()
+        .mockImplementation((prefix: string, options?: { limit?: number; offset?: number }) => {
+          if (prefix === userId) {
+            if (options?.offset === 0) {
+              return Promise.resolve({ data: page1, error: null });
+            }
+            if (options?.offset === 100) {
+              return Promise.resolve({ data: page2, error: null });
+            }
+          }
+          // Subfolders return 1 original.jpg
+          return Promise.resolve({
+            data: [{ name: "original.jpg" }],
+            error: null,
+          });
+        });
+
+      const removeMock = vi.fn().mockResolvedValue({ data: [], error: null });
+      const deleteUserMock = vi.fn().mockResolvedValue({ data: null, error: null });
+
+      const adminClientMock = {
+        auth: { admin: { deleteUser: deleteUserMock } },
+      } as unknown as SupabaseClient<Database>;
+
+      const supabaseMock = {
+        storage: {
+          from: vi.fn(() => ({ list: listMock, remove: removeMock })),
+        },
+      } as unknown as SupabaseClient<Database>;
+
+      const res = await deleteAccount(adminClientMock, supabaseMock, userId);
+
+      expect(res).toEqual({ ok: true });
+      // 120 scan folders * 1 file = 120 files. In batches of 100, remove should be called twice (100, then 20).
+      expect(removeMock).toHaveBeenCalledTimes(2);
+      expect(removeMock.mock.calls[0]?.[0].length).toBe(100);
+      expect(removeMock.mock.calls[1]?.[0].length).toBe(20);
+      expect(deleteUserMock).toHaveBeenCalledWith(userId);
     });
   });
 

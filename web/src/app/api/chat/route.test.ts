@@ -262,6 +262,13 @@ describe("POST /api/chat", () => {
   it("finds or creates scan chat when scanId is provided", async () => {
     const validScanId = "660e8400-e29b-41d4-a716-446655440000";
     currentUser.mockResolvedValue({ id: "user-123", email: "user@test.com" });
+    const selectScanMock = vi.fn(() => ({
+      eq: () => ({
+        eq: () => ({
+          maybeSingle: vi.fn().mockResolvedValue({ data: { id: validScanId }, error: null }),
+        }),
+      }),
+    }));
     const selectChatMock = vi.fn(() => ({
       eq: () => ({
         eq: () => ({
@@ -273,6 +280,9 @@ describe("POST /api/chat", () => {
 
     const supabaseMock = {
       from: vi.fn((table: string) => {
+        if (table === "scans") {
+          return { select: selectScanMock };
+        }
         if (table === "chats") {
           return { select: selectChatMock };
         }
@@ -298,5 +308,83 @@ describe("POST /api/chat", () => {
       type: "done",
       chatId: "chat-for-scan",
     });
+  });
+
+  it("returns 404 when scanId does not belong to logged-in user or does not exist", async () => {
+    const validScanId = "660e8400-e29b-41d4-a716-446655440000";
+    currentUser.mockResolvedValue({ id: "user-123", email: "user@test.com" });
+    const selectScanMock = vi.fn(() => ({
+      eq: () => ({
+        eq: () => ({
+          maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+        }),
+      }),
+    }));
+
+    const supabaseMock = {
+      from: vi.fn((table: string) => {
+        if (table === "scans") {
+          return { select: selectScanMock };
+        }
+        return {};
+      }),
+    };
+    createClient.mockResolvedValue(supabaseMock);
+
+    const response = await post({
+      locale: "en",
+      messages: [question],
+      scanId: validScanId,
+    });
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ code: "not_found" });
+    expect(streamChat).not.toHaveBeenCalled();
+  });
+
+  it("emits error event when persisting model response in chat_messages fails", async () => {
+    const validChatId = "550e8400-e29b-41d4-a716-446655440000";
+    currentUser.mockResolvedValue({ id: "user-123", email: "user@test.com" });
+    const selectChatMock = vi.fn(() => ({
+      eq: () => ({
+        eq: () => ({
+          maybeSingle: vi.fn().mockResolvedValue({ data: { id: validChatId }, error: null }),
+        }),
+      }),
+    }));
+
+    let insertCount = 0;
+    const insertMsgMock = vi.fn().mockImplementation(() => {
+      insertCount++;
+      if (insertCount === 1) {
+        // user message succeeds
+        return Promise.resolve({ data: null, error: null });
+      }
+      // model message insert fails
+      return Promise.resolve({ data: null, error: { message: "DB disk full on message insert" } });
+    });
+
+    const supabaseMock = {
+      from: vi.fn((table: string) => {
+        if (table === "chats") return { select: selectChatMock };
+        if (table === "chat_messages") return { insert: insertMsgMock };
+        return {};
+      }),
+    };
+    createClient.mockResolvedValue(supabaseMock);
+    streamChat.mockReturnValue(yieldAll("Jawaban selesai."));
+
+    const response = await post({
+      locale: "id",
+      messages: [question],
+      chatId: validChatId,
+    });
+
+    expect(response.status).toBe(200);
+    const receivedEvents = await events(response);
+
+    // Should have deltas, then terminate with error event instead of done
+    expect(receivedEvents.some((e) => e.type === "delta")).toBe(true);
+    expect(receivedEvents.at(-1)).toEqual({ type: "error" });
   });
 });

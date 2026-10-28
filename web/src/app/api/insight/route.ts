@@ -75,19 +75,21 @@ export async function POST(request: Request) {
         if (!done.success) throw new Error("insight does not match the schema");
 
         if (scanId && user) {
-          try {
-            const adminClient = createAdminClient();
-            await adminClient
-              .from("scans")
-              .update({
-                insight: done.data,
-                insight_locale: locale,
-                insight_prompt_version: INSIGHT_PROMPT_VERSION,
-              })
-              .eq("id", scanId)
-              .eq("user_id", user.id);
-          } catch (updateErr) {
-            console.error("Failed to update scan insight", updateErr);
+          const adminClient = createAdminClient();
+          const { error: updateErr } = await adminClient
+            .from("scans")
+            .update({
+              insight: done.data,
+              insight_locale: locale,
+              insight_prompt_version: INSIGHT_PROMPT_VERSION,
+            })
+            .eq("id", scanId)
+            .eq("user_id", user.id);
+
+          if (updateErr) {
+            console.error("Failed to update scan insight:", updateErr.message);
+            send({ type: "error" });
+            return;
           }
         }
 

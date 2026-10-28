@@ -42,6 +42,17 @@ export async function POST(request: Request) {
       }
       activeChatId = existingChat.id;
     } else if (scanId) {
+      const { data: scanRow } = await supabase
+        .from("scans")
+        .select("id")
+        .eq("id", scanId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (!scanRow) {
+        return fail(404, "not_found");
+      }
+
       const { data: scanChat } = await supabase
         .from("chats")
         .select("id")
@@ -112,11 +123,16 @@ export async function POST(request: Request) {
         if (!sent) throw new Error("empty answer");
 
         if (user && supabase && activeChatId) {
-          await supabase.from("chat_messages").insert({
+          const { error: modelMsgErr } = await supabase.from("chat_messages").insert({
             chat_id: activeChatId,
             role: "model",
             content: fullText,
           });
+          if (modelMsgErr) {
+            console.error("Failed to persist model chat message:", modelMsgErr.message);
+            send({ type: "error" });
+            return;
+          }
         }
         send({ type: "done", ...(activeChatId ? { chatId: activeChatId } : {}) });
       } catch (error) {
