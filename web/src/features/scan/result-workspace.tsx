@@ -33,9 +33,10 @@ function readStoredScan(): string | null {
   }
 }
 
-export function ResultWorkspace({ lang }: { lang: Locale }) {
+export function ResultWorkspace({ lang, initialScan }: { lang: Locale; initialScan?: StoredScan }) {
   const raw = useSyncExternalStore(noSubscribe, readStoredScan, () => null);
   const scan = useMemo(() => {
+    if (initialScan) return initialScan;
     if (!raw) return null;
     try {
       const parsed = storedScanSchema.safeParse(JSON.parse(raw));
@@ -43,7 +44,7 @@ export function ResultWorkspace({ lang }: { lang: Locale }) {
     } catch {
       return null;
     }
-  }, [raw]);
+  }, [initialScan, raw]);
 
   if (!scan) {
     return (

@@ -112,7 +112,13 @@ export function ScanFlow({ lang }: { lang: Locale }) {
           return setPhase({ name: "rejected", reason: event.reason });
         else if (event.type === "error")
           return setPhase({ name: "error", message: `error.${event.code}` });
-        else return open({ image: await toDataUrl(image), result: event.result });
+        else {
+          if (event.scanId) {
+            openedResult.current = true;
+            return router.push(`/${lang}/scans/${event.scanId}`);
+          }
+          return open({ image: await toDataUrl(image), result: event.result });
+        }
       }
     } catch {
       // Stream cut off (network drop or function timeout) before a final event.

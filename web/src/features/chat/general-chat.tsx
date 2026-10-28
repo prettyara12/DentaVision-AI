@@ -2,6 +2,7 @@
 
 import { useMemo, useSyncExternalStore } from "react";
 import { z } from "zod";
+import type { StoredScan } from "@/features/scan/result";
 import type { Locale } from "@/lib/i18n";
 import { suggestions } from "./chat";
 import { ChatPanel } from "./chat-panel";
@@ -18,23 +19,53 @@ function readStoredChat(): string | null {
   }
 }
 
-/** General dental chat for /chat (US-07): no scan context, kept in this tab only. */
-export function GeneralChat({ lang }: { lang: Locale }) {
+/** General dental chat for /chat (US-07) and saved chats for /chats/[id]. */
+export function GeneralChat({
+  lang,
+  initialMessages,
+  initialChatId,
+  scan,
+}: {
+  lang: Locale;
+  initialMessages?: ChatMessage[];
+  initialChatId?: string;
+  scan?: StoredScan | null;
+}) {
   const raw = useSyncExternalStore(noSubscribe, readStoredChat, () => undefined);
   const initial = useMemo(() => {
+    if (initialMessages) return initialMessages;
     try {
       const parsed = z.array(chatMessageSchema).safeParse(JSON.parse(raw ?? "[]"));
       return parsed.success ? parsed.data : [];
     } catch {
       return [];
     }
-  }, [raw]);
+  }, [initialMessages, raw]);
+
   // Wait for the browser snapshot so a reload starts from the stored conversation.
-  if (raw === undefined) return null;
-  return <Conversation lang={lang} initial={initial} />;
+  if (!initialMessages && raw === undefined) return null;
+  return (
+    <Conversation lang={lang} initial={initial} initialChatId={initialChatId} scan={scan ?? null} />
+  );
 }
 
-function Conversation({ lang, initial }: { lang: Locale; initial: ChatMessage[] }) {
-  const chat = useChat(lang, null, initial);
-  return <ChatPanel lang={lang} chat={chat} suggestions={suggestions(lang, null)} />;
+function Conversation({
+  lang,
+  initial,
+  initialChatId,
+  scan,
+}: {
+  lang: Locale;
+  initial: ChatMessage[];
+  initialChatId?: string;
+  scan: StoredScan | null;
+}) {
+  const chat = useChat(lang, scan, initial, initialChatId ? { chatId: initialChatId } : undefined);
+  return (
+    <ChatPanel
+      lang={lang}
+      chat={chat}
+      suggestions={suggestions(lang, scan?.result.detections ?? null)}
+    />
+  );
 }
