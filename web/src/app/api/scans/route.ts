@@ -4,6 +4,14 @@ import { readBody } from "@/lib/body";
 import { isRejected, validateXray } from "@/lib/gemini";
 import { isLocale } from "@/lib/i18n";
 import { analyzeImage } from "@/lib/inference";
+import {
+  checkQuota,
+  consumeQuota,
+  getQuotaLimit,
+  getQuotaSubject,
+  quotaHeaders,
+} from "@/lib/quota";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient, currentUser } from "@/lib/supabase/server";
 
 // Compressed upload limit (docs/architecture.md §4.2); the browser keeps the original ≤ 10 MB.
@@ -43,6 +51,21 @@ export async function POST(request: Request) {
   const user = await currentUser();
   const supabase = user && shouldSave ? await createClient() : null;
 
+  const subjectInfo = getQuotaSubject(user, request);
+  const limit = getQuotaLimit(subjectInfo.role, "scan");
+  const adminClient = createAdminClient();
+  const quotaCheck = await checkQuota(adminClient, subjectInfo.subject, "scan", limit);
+  if (!quotaCheck.ok) {
+    return Response.json(
+      {
+        code: "quota_exceeded",
+        resetInSeconds: quotaCheck.resetInSeconds,
+        role: subjectInfo.role,
+      },
+      { status: 429, headers: quotaHeaders(quotaCheck) },
+    );
+  }
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -53,6 +76,18 @@ export async function POST(request: Request) {
         const verdict = await validateXray(bytes, mimeType, locale);
         if (verdict && isRejected(verdict)) {
           send({ type: "rejected", reason: verdict.reason });
+          return;
+        }
+
+        // Daily quota is consumed only if validation succeeds (docs/PRD.md §7).
+        const consumed = await consumeQuota(adminClient, subjectInfo.subject, "scan", limit);
+        if (!consumed.ok) {
+          send({
+            type: "error",
+            code: "quota_exceeded",
+            resetInSeconds: consumed.resetInSeconds,
+            role: subjectInfo.role,
+          });
           return;
         }
 

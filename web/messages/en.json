@@ -23,6 +23,7 @@
   "error.unavailable": "The analysis server is not responding. Try again shortly.",
   "error.too_large": "The image is too large after compression. Try another image.",
   "error.unsupported_type": "The server cannot read this image. Try another JPG or PNG file.",
+  "error.quota_exceeded": "Your daily scan limit has been reached. Try again tomorrow.",
   "error.storage": "The result cannot be kept in this tab. Close other tabs or try another browser.",
   "action.retry": "Try again",
   "action.another": "Choose another image",
@@ -30,6 +31,9 @@
   "result.low_quality": "Low image resolution, findings may be missed.",
   "result.empty": "No scan result in this tab yet.",
   "result.new_scan": "Upload X-ray",
+  "result.save_to_history": "Save to history",
+  "result.saving_to_history": "Saving result to your account...",
+  "result.save_error": "Failed to save scan result to account. Try again.",
   "findings.title": "Findings",
   "findings.none_attention": "No findings that need attention.",
   "findings.limits": "The model often misses findings, so this does not replace a dental exam.",
@@ -141,5 +145,9 @@
   "settings.deleting": "Deleting...",
   "common.cancel": "Cancel",
   "common.delete": "Delete",
-  "common.deleting": "Deleting..."
+  "common.deleting": "Deleting...",
+  "quota.notice.title": "Daily limit reached",
+  "quota.notice.desc": "Your quota will reset at 00:00 WITA ({timeRemaining} remaining).",
+  "quota.notice.guest_hint": "Sign in for higher limits: up to 20 scans and 100 chats every day.",
+  "quota.notice.login_cta": "Sign in"
 }

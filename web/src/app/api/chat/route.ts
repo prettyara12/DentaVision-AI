@@ -2,6 +2,8 @@ import { chatRequestSchema, lastTurns, type ChatEvent } from "@/features/chat/ch
 import { findingsContext } from "@/features/insight/insight";
 import { readBody } from "@/lib/body";
 import { streamChat } from "@/lib/gemini";
+import { consumeQuota, getQuotaLimit, getQuotaSubject, quotaHeaders } from "@/lib/quota";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient, currentUser } from "@/lib/supabase/server";
 
 // 100 messages of history plus up to 500 detections stay well under this.
@@ -95,7 +97,28 @@ export async function POST(request: Request) {
       }
       activeChatId = newChat.id;
     }
+  }
 
+  // Quota is consumed only after authorization and validation succeed (docs/architecture.md §4.1).
+  const subjectInfo = getQuotaSubject(user, request);
+  const limit = getQuotaLimit(subjectInfo.role, "chat");
+  const adminClient = createAdminClient();
+  const quota = await consumeQuota(adminClient, subjectInfo.subject, "chat", limit);
+  if (!quota.ok) {
+    return Response.json(
+      {
+        code: "quota_exceeded",
+        resetInSeconds: quota.resetInSeconds,
+        role: subjectInfo.role,
+      },
+      {
+        status: 429,
+        headers: quotaHeaders({ limit, remaining: 0, resetInSeconds: quota.resetInSeconds }),
+      },
+    );
+  }
+
+  if (user && supabase && activeChatId) {
     const lastMsg = history.at(-1)!;
     const { error: msgErr } = await supabase.from("chat_messages").insert({
       chat_id: activeChatId,

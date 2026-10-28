@@ -7,6 +7,18 @@ const analyzeImage = vi.hoisted(() => vi.fn());
 const currentUser = vi.hoisted(() => vi.fn());
 const createClient = vi.hoisted(() => vi.fn());
 const saveScanUpload = vi.hoisted(() => vi.fn());
+const checkQuota = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ ok: true, limit: 5, remaining: 5, resetInSeconds: 3600 }),
+);
+const consumeQuota = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ ok: true, limit: 5, resetInSeconds: 3600 }),
+);
+const getQuotaSubject = vi.hoisted(() =>
+  vi.fn().mockReturnValue({ subject: "ip:test", role: "guest" }),
+);
+const getQuotaLimit = vi.hoisted(() => vi.fn().mockReturnValue(5));
+const quotaHeaders = vi.hoisted(() => vi.fn().mockReturnValue({ "RateLimit-Limit": "5" }));
+const createAdminClient = vi.hoisted(() => vi.fn().mockReturnValue({}));
 
 vi.mock("@/lib/gemini", async () => ({
   validateXray,
@@ -17,6 +29,16 @@ vi.mock("@/lib/inference", () => ({ analyzeImage }));
 vi.mock("@/lib/supabase/server", () => ({
   currentUser,
   createClient,
+}));
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient,
+}));
+vi.mock("@/lib/quota", () => ({
+  checkQuota,
+  consumeQuota,
+  getQuotaSubject,
+  getQuotaLimit,
+  quotaHeaders,
 }));
 vi.mock("@/features/history/data", () => ({
   saveScanUpload,
@@ -68,6 +90,10 @@ beforeEach(() => {
   currentUser.mockReset().mockResolvedValue(null);
   createClient.mockReset();
   saveScanUpload.mockReset();
+  checkQuota
+    .mockReset()
+    .mockResolvedValue({ ok: true, limit: 5, remaining: 5, resetInSeconds: 3600 });
+  consumeQuota.mockReset().mockResolvedValue({ ok: true, limit: 5, resetInSeconds: 3600 });
 });
 
 describe("POST /api/scans", () => {
@@ -236,5 +262,59 @@ describe("POST /api/scans", () => {
       type: "result",
       result: RESULT,
     });
+  });
+
+  it("returns 429 when initial checkQuota reports quota exceeded", async () => {
+    checkQuota.mockResolvedValueOnce({
+      ok: false,
+      count: 5,
+      limit: 5,
+      remaining: 0,
+      resetInSeconds: 1800,
+    });
+
+    const response = await POST(await upload(JPEG));
+    expect(response.status).toBe(429);
+    expect(await response.json()).toEqual({
+      code: "quota_exceeded",
+      resetInSeconds: 1800,
+      role: "guest",
+    });
+    expect(validateXray).not.toHaveBeenCalled();
+    expect(consumeQuota).not.toHaveBeenCalled();
+  });
+
+  it("does not consume quota when validation rejects the image", async () => {
+    validateXray.mockResolvedValue({
+      is_dental_panoramic: false,
+      confidence: 0.9,
+      reason: "Bukan X-ray gigi",
+    });
+
+    const response = await POST(await upload(JPEG));
+    const resultEvents = await events(response);
+    expect(resultEvents).toEqual([
+      { type: "stage", stage: "validating" },
+      { type: "rejected", reason: "Bukan X-ray gigi" },
+    ]);
+    expect(consumeQuota).not.toHaveBeenCalled();
+  });
+
+  it("emits error quota_exceeded when consumeQuota fails after validation", async () => {
+    validateXray.mockResolvedValue(null);
+    consumeQuota.mockResolvedValueOnce({ ok: false, limit: 5, resetInSeconds: 1800 });
+
+    const response = await POST(await upload(JPEG));
+    const resultEvents = await events(response);
+    expect(resultEvents).toEqual([
+      { type: "stage", stage: "validating" },
+      {
+        type: "error",
+        code: "quota_exceeded",
+        resetInSeconds: 1800,
+        role: "guest",
+      },
+    ]);
+    expect(analyzeImage).not.toHaveBeenCalled();
   });
 });
