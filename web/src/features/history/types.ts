@@ -11,7 +11,7 @@ export type UserScanSummary = {
   createdAt: string;
   imageUrl: string;
   attentionCount: number;
-  detectionsCount: number;
+  detectionsCount: number | null;
   modelVersion: string;
 };
 

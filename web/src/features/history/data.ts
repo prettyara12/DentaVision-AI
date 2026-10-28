@@ -255,16 +255,17 @@ export async function getUserScans(
       .createSignedUrl(scan.image_path, 3600);
 
     const parsed = analyzeResultSchema.shape.detections.safeParse(scan.detections);
-    const detections = parsed.success ? parsed.data : [];
-
     let attentionCount = 0;
-    for (const d of detections) {
-      if (classCatalog[d.class_id]?.group === "attention") {
-        attentionCount++;
+    let detectionsCount: number | null = null;
+
+    if (parsed.success) {
+      detectionsCount = parsed.data.length;
+      for (const d of parsed.data) {
+        if (classCatalog[d.class_id]?.group === "attention") {
+          attentionCount++;
+        }
       }
     }
-
-    const detectionsCount = detections.length;
 
     summaries.push({
       id: scan.id,

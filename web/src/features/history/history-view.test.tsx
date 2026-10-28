@@ -66,6 +66,26 @@ describe("HistoryView", () => {
     expect(html).toContain("Hapus");
   });
 
+  it("renders unavailable label when detectionsCount is null (corrupted data)", () => {
+    const corruptScan: UserScanSummary = {
+      id: "scan-corrupt",
+      createdAt: "2026-10-28T10:00:00Z",
+      imageUrl: "",
+      attentionCount: 0,
+      detectionsCount: null,
+      modelVersion: "best_resnet50.pt",
+    };
+    const htmlId = renderToString(
+      <HistoryView lang="id" initialScans={[corruptScan]} initialChats={[]} />,
+    );
+    expect(htmlId).toContain("Data deteksi tidak tersedia");
+
+    const htmlEn = renderToString(
+      <HistoryView lang="en" initialScans={[corruptScan]} initialChats={[]} />,
+    );
+    expect(htmlEn).toContain("Detection data unavailable");
+  });
+
   it("renders chats tab when defaultTab is chats", () => {
     const html = renderToString(
       <HistoryView

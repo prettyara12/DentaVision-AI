@@ -178,7 +178,9 @@ export function HistoryView({
                     <span className="text-sm font-medium text-ink">
                       {formatDate(scan.createdAt, lang)}
                     </span>
-                    {scan.attentionCount > 0 ? (
+                    {scan.detectionsCount === null ? (
+                      <span className="text-xs text-ink-2">{t(lang, "history.invalid_data")}</span>
+                    ) : scan.attentionCount > 0 ? (
                       <span className="inline-flex items-center gap-1.5 text-xs font-medium text-finding-attention">
                         <span
                           className="h-2 w-2 rounded-full bg-finding-attention"

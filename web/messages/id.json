@@ -118,6 +118,7 @@
   "history.empty_chats": "Belum ada riwayat percakapan.",
   "history.new_chat": "Mulai chat baru",
   "history.attention_findings": "{count} temuan perlu perhatian",
+  "history.invalid_data": "Data deteksi tidak tersedia",
   "history.open_scan": "Buka hasil",
   "history.open_chat": "Buka percakapan",
   "history.delete": "Hapus",

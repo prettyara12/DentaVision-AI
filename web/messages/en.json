@@ -118,6 +118,7 @@
   "history.empty_chats": "No conversations yet.",
   "history.new_chat": "Start new chat",
   "history.attention_findings": "{count} findings need attention",
+  "history.invalid_data": "Detection data unavailable",
   "history.open_scan": "View result",
   "history.open_chat": "Open conversation",
   "history.delete": "Delete",

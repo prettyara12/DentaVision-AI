@@ -581,7 +581,7 @@ describe("History Data Operations", () => {
         createdAt: "2026-10-28T10:00:00Z",
         imageUrl: "https://example.com/thumb.jpg",
         attentionCount: 0,
-        detectionsCount: 0,
+        detectionsCount: null,
         modelVersion: "v1.0",
       });
     });
