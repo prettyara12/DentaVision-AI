@@ -27,7 +27,7 @@ export type ScanErrorCode = "busy" | "loading" | "unavailable" | "too_large" | "
 export type ScanEvent =
   | { type: "stage"; stage: "validating" | "analyzing" }
   | { type: "rejected"; reason: string | null }
-  | { type: "result"; result: AnalyzeResult }
+  | { type: "result"; result: AnalyzeResult; scanId?: string }
   | { type: "error"; code: ScanErrorCode };
 
 // Guest results live only in this tab (docs/user-flows.md §2).

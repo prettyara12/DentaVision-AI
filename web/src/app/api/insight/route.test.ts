@@ -1,9 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { InsightEvent } from "@/features/insight/insight";
+import { INSIGHT_PROMPT_VERSION, type InsightEvent } from "@/features/insight/insight";
 import { readLines } from "@/features/scan/upload";
 
 const streamInsight = vi.hoisted(() => vi.fn());
+const currentUser = vi.hoisted(() => vi.fn().mockResolvedValue(null));
+const createClient = vi.hoisted(() => vi.fn());
+const createAdminClient = vi.hoisted(() => vi.fn());
+
 vi.mock("@/lib/gemini", () => ({ streamInsight }));
+vi.mock("@/lib/supabase/server", () => ({
+  currentUser,
+  createClient,
+}));
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient,
+}));
 
 const { POST } = await import("./route");
 
@@ -48,6 +59,9 @@ async function* yieldAll(...texts: string[]) {
 
 beforeEach(() => {
   streamInsight.mockReset();
+  currentUser.mockReset().mockResolvedValue(null);
+  createClient.mockReset();
+  createAdminClient.mockReset();
 });
 
 describe("POST /api/insight", () => {
@@ -95,5 +109,87 @@ describe("POST /api/insight", () => {
     expect((await events(await post({ locale: "id", detections: [] }))).at(-1)).toEqual({
       type: "error",
     });
+  });
+
+  it("verifies ownership and updates scan insight via createAdminClient when scanId is provided", async () => {
+    const validScanId = "550e8400-e29b-41d4-a716-446655440000";
+    currentUser.mockResolvedValue({ id: "user-123", email: "user@test.com" });
+
+    const selectScanMock = vi.fn(() => ({
+      eq: () => ({
+        eq: () => ({
+          maybeSingle: vi.fn().mockResolvedValue({ data: { id: validScanId }, error: null }),
+        }),
+      }),
+    }));
+
+    const updateScanMock = vi.fn(() => ({
+      eq: () => ({
+        eq: vi.fn().mockResolvedValue({ data: null, error: null }),
+      }),
+    }));
+
+    createClient.mockResolvedValue({
+      from: vi.fn((table: string) => {
+        if (table === "scans") return { select: selectScanMock };
+        return {};
+      }),
+    });
+
+    createAdminClient.mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "scans") return { update: updateScanMock };
+        return {};
+      }),
+    });
+
+    const full = JSON.stringify(INSIGHT);
+    streamInsight.mockReturnValue(yieldAll(full));
+
+    const response = await post({
+      locale: "id",
+      detections: [caries],
+      scanId: validScanId,
+    });
+
+    expect(response.status).toBe(200);
+    const out = await events(response);
+    expect(out.at(-1)?.type).toBe("done");
+
+    expect(updateScanMock).toHaveBeenCalledWith({
+      insight: INSIGHT,
+      insight_locale: "id",
+      insight_prompt_version: INSIGHT_PROMPT_VERSION,
+    });
+  });
+
+  it("returns 404 when scanId does not belong to logged-in user", async () => {
+    const validScanId = "550e8400-e29b-41d4-a716-446655440000";
+    currentUser.mockResolvedValue({ id: "user-123", email: "user@test.com" });
+
+    const selectScanMock = vi.fn(() => ({
+      eq: () => ({
+        eq: () => ({
+          maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+        }),
+      }),
+    }));
+
+    createClient.mockResolvedValue({
+      from: vi.fn((table: string) => {
+        if (table === "scans") return { select: selectScanMock };
+        return {};
+      }),
+    });
+
+    const response = await post({
+      locale: "id",
+      detections: [caries],
+      scanId: validScanId,
+    });
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ code: "not_found" });
+    expect(streamInsight).not.toHaveBeenCalled();
   });
 });

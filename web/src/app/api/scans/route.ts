@@ -1,8 +1,10 @@
+import { saveScanUpload } from "@/features/history/data";
 import type { ScanEvent } from "@/features/scan/result";
 import { readBody } from "@/lib/body";
 import { isRejected, validateXray } from "@/lib/gemini";
 import { isLocale } from "@/lib/i18n";
 import { analyzeImage } from "@/lib/inference";
+import { createClient, currentUser } from "@/lib/supabase/server";
 
 // Compressed upload limit (docs/architecture.md §4.2); the browser keeps the original ≤ 10 MB.
 const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
@@ -21,7 +23,6 @@ function sniff(bytes: Uint8Array): string | null {
 const fail = (status: number, code: string) => Response.json({ code }, { status });
 
 export async function POST(request: Request) {
-  // shortcut: no auth or quota yet, both land with #15/#18 (M4); guests are unlimited until then.
   // Browsers always send Content-Length for FormData; the cap holds even if it lies (same rule as the API, 411).
   const read = await readBody(request, MAX_BODY_BYTES);
   if ("error" in read) return read.error;
@@ -36,6 +37,11 @@ export async function POST(request: Request) {
   const bytes = new Uint8Array(await image.arrayBuffer());
   const mimeType = sniff(bytes);
   if (!mimeType) return fail(415, "unsupported_type");
+
+  const saveField = form?.get("save");
+  const shouldSave = saveField !== "false";
+  const user = await currentUser();
+  const supabase = user && shouldSave ? await createClient() : null;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -52,7 +58,15 @@ export async function POST(request: Request) {
 
         send({ type: "stage", stage: "analyzing" });
         const outcome = await analyzeImage(new Blob([bytes], { type: mimeType }));
-        if (outcome.kind === "result") send({ type: "result", result: outcome.result });
+        if (outcome.kind === "result") {
+          if (user && shouldSave && supabase) {
+            const scanId = crypto.randomUUID();
+            await saveScanUpload(supabase, user.id, scanId, bytes, outcome.result);
+            send({ type: "result", result: outcome.result, scanId });
+          } else {
+            send({ type: "result", result: outcome.result });
+          }
+        }
         // The API's colour pre-filter is the fallback check when Gemini is unavailable.
         else if (outcome.kind === "not_xray") send({ type: "rejected", reason: null });
         else send({ type: "error", code: outcome.code });
