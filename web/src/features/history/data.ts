@@ -253,24 +253,17 @@ export async function getUserScans(
       .from("scans")
       .createSignedUrl(scan.image_path, 3600);
 
+    const parsed = analyzeResultSchema.shape.detections.safeParse(scan.detections);
+    const detections = parsed.success ? parsed.data : [];
+
     let attentionCount = 0;
-    if (Array.isArray(scan.detections)) {
-      for (const d of scan.detections) {
-        if (
-          typeof d === "object" &&
-          d !== null &&
-          "class_id" in d &&
-          typeof (d as { class_id: number }).class_id === "number"
-        ) {
-          const classId = (d as { class_id: number }).class_id;
-          if (classCatalog[classId]?.group === "attention") {
-            attentionCount++;
-          }
-        }
+    for (const d of detections) {
+      if (classCatalog[d.class_id]?.group === "attention") {
+        attentionCount++;
       }
     }
 
-    const detectionsCount = Array.isArray(scan.detections) ? scan.detections.length : 0;
+    const detectionsCount = detections.length;
 
     summaries.push({
       id: scan.id,

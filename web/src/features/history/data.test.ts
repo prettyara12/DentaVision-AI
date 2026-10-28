@@ -393,9 +393,9 @@ describe("History Data Operations", () => {
           image_path: `${userId}/scan-1/original.jpg`,
           model_version: "v1.0",
           detections: [
-            { class_id: 0 }, // attention
-            { class_id: 4 }, // attention
-            { class_id: 1 }, // treatment
+            { class_id: 0, confidence: 0.9, box: [1, 2, 3, 4] }, // attention
+            { class_id: 4, confidence: 0.85, box: [5, 6, 7, 8] }, // attention
+            { class_id: 1, confidence: 0.7, box: [9, 10, 11, 12] }, // treatment
           ],
           created_at: "2026-10-28T10:00:00Z",
         },
@@ -405,7 +405,7 @@ describe("History Data Operations", () => {
           image_path: `${userId}/scan-2/original.jpg`,
           model_version: "v1.0",
           detections: [
-            { class_id: 15 }, // anatomy (not attention)
+            { class_id: 15, confidence: 0.99, box: [13, 14, 15, 16] }, // anatomy (not attention)
           ],
           created_at: "2026-10-27T10:00:00Z",
         },
@@ -457,6 +457,50 @@ describe("History Data Operations", () => {
 
       expect(createSignedUrlMock).toHaveBeenCalledWith(`${userId}/scan-1/original.jpg`, 3600);
       expect(createSignedUrlMock).toHaveBeenCalledWith(`${userId}/scan-2/original.jpg`, 3600);
+    });
+
+    it("validates detections with Zod safeParse and falls back safely on corrupted data", async () => {
+      const scansInDb = [
+        {
+          id: "scan-corrupt",
+          user_id: userId,
+          image_path: `${userId}/scan-corrupt/original.jpg`,
+          model_version: "v1.0",
+          detections: [
+            { class_id: 999, confidence: 5.0, box: "corrupted-box" }, // invalid schema
+          ],
+          created_at: "2026-10-28T10:00:00Z",
+        },
+      ];
+
+      const orderMock = vi.fn().mockResolvedValue({ data: scansInDb, error: null });
+      const eqMock = vi.fn(() => ({ order: orderMock }));
+      const selectMock = vi.fn(() => ({ eq: eqMock }));
+      const createSignedUrlMock = vi.fn(() =>
+        Promise.resolve({
+          data: { signedUrl: "https://example.com/thumb.jpg" },
+          error: null,
+        }),
+      );
+
+      const supabaseMock = {
+        from: vi.fn(() => ({ select: selectMock })),
+        storage: {
+          from: vi.fn(() => ({ createSignedUrl: createSignedUrlMock })),
+        },
+      } as unknown as SupabaseClient<Database>;
+
+      const summaries = await getUserScans(supabaseMock, userId);
+
+      expect(summaries).toHaveLength(1);
+      expect(summaries[0]).toEqual({
+        id: "scan-corrupt",
+        createdAt: "2026-10-28T10:00:00Z",
+        imageUrl: "https://example.com/thumb.jpg",
+        attentionCount: 0,
+        detectionsCount: 0,
+        modelVersion: "v1.0",
+      });
     });
   });
 
