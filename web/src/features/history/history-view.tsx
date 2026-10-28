@@ -290,6 +290,7 @@ export function HistoryView({
         }
         confirmLabel={t(lang, "common.delete")}
         cancelLabel={t(lang, "common.cancel")}
+        loadingLabel={t(lang, "common.deleting")}
         loading={isDeleting}
         onConfirm={confirmDelete}
         onCancel={() => {

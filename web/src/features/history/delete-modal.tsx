@@ -8,6 +8,7 @@ export type DeleteModalProps = {
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  loadingLabel?: string;
   loading?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -19,6 +20,7 @@ export function DeleteModal({
   message,
   confirmLabel = "Hapus",
   cancelLabel = "Batal",
+  loadingLabel = "Menghapus...",
   loading = false,
   onConfirm,
   onCancel,
@@ -132,7 +134,7 @@ export function DeleteModal({
             disabled={loading}
             className="inline-flex min-h-11 items-center justify-center rounded-sm bg-finding-attention px-4 text-sm font-medium text-white hover:opacity-90 focus-visible:outline-2 focus-visible:outline-finding-attention disabled:opacity-50"
           >
-            {loading ? "Menghapus..." : confirmLabel}
+            {loading ? loadingLabel : confirmLabel}
           </button>
         </div>
       </div>
