@@ -4,6 +4,9 @@ import { readLines } from "@/features/scan/upload";
 
 const validateXray = vi.hoisted(() => vi.fn());
 const analyzeImage = vi.hoisted(() => vi.fn());
+const currentUser = vi.hoisted(() => vi.fn());
+const createClient = vi.hoisted(() => vi.fn());
+const saveScanUpload = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/gemini", async () => ({
   validateXray,
@@ -11,6 +14,13 @@ vi.mock("@/lib/gemini", async () => ({
 }));
 vi.mock("@/lib/env", () => ({ env: () => ({}) }));
 vi.mock("@/lib/inference", () => ({ analyzeImage }));
+vi.mock("@/lib/supabase/server", () => ({
+  currentUser,
+  createClient,
+}));
+vi.mock("@/features/history/data", () => ({
+  saveScanUpload,
+}));
 
 const { POST } = await import("./route");
 
@@ -55,6 +65,9 @@ async function events(response: Response): Promise<ScanEvent[]> {
 beforeEach(() => {
   validateXray.mockReset();
   analyzeImage.mockReset();
+  currentUser.mockReset().mockResolvedValue(null);
+  createClient.mockReset();
+  saveScanUpload.mockReset();
 });
 
 describe("POST /api/scans", () => {
@@ -175,5 +188,53 @@ describe("POST /api/scans", () => {
     analyzeImage.mockResolvedValue({ kind: "result", result: RESULT });
     await events(await POST(await upload(JPEG, "fr")));
     expect(validateXray).toHaveBeenCalledWith(expect.any(Uint8Array), "image/jpeg", "id");
+  });
+
+  it("saves scan and emits scanId when user is logged in and save is not 'false'", async () => {
+    currentUser.mockResolvedValue({ id: "user-123", email: "user@test.com" });
+    createClient.mockResolvedValue({ client: "supabase" });
+    saveScanUpload.mockResolvedValue(undefined);
+    validateXray.mockResolvedValue(null);
+    analyzeImage.mockResolvedValue({ kind: "result", result: RESULT });
+
+    const body = new FormData();
+    body.append("image", new Blob([JPEG], { type: "image/jpeg" }), "scan.jpg");
+    body.append("locale", "id");
+    const response = await POST(await multipart(body));
+    const resultEvents = await events(response);
+
+    expect(saveScanUpload).toHaveBeenCalledWith(
+      { client: "supabase" },
+      "user-123",
+      expect.any(String),
+      expect.any(Uint8Array),
+      RESULT,
+    );
+    const lastEvent = resultEvents.at(-1);
+    expect(lastEvent).toEqual({
+      type: "result",
+      result: RESULT,
+      scanId: expect.any(String),
+    });
+  });
+
+  it("does not save scan and emits no scanId when user is logged in but save is 'false'", async () => {
+    currentUser.mockResolvedValue({ id: "user-123", email: "user@test.com" });
+    createClient.mockResolvedValue({ client: "supabase" });
+    validateXray.mockResolvedValue(null);
+    analyzeImage.mockResolvedValue({ kind: "result", result: RESULT });
+
+    const body = new FormData();
+    body.append("image", new Blob([JPEG], { type: "image/jpeg" }), "scan.jpg");
+    body.append("save", "false");
+    const response = await POST(await multipart(body));
+    const resultEvents = await events(response);
+
+    expect(saveScanUpload).not.toHaveBeenCalled();
+    const lastEvent = resultEvents.at(-1);
+    expect(lastEvent).toEqual({
+      type: "result",
+      result: RESULT,
+    });
   });
 });

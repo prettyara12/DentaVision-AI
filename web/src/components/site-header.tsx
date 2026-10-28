@@ -24,21 +24,40 @@ async function Account({ lang }: { lang: Locale }) {
   const user = await currentUser();
   if (!user) {
     return (
-      <Link href={`/${lang}/login`} className="text-sm font-medium text-accent">
+      <Link
+        href={`/${lang}/login`}
+        className="inline-flex min-h-11 items-center text-sm font-medium text-accent hover:underline"
+      >
         {t(lang, "nav.login")}
       </Link>
     );
   }
   return (
-    <form action={signOut} className="flex min-w-0 items-center gap-3">
-      <input type="hidden" name="lang" value={lang} />
-      <span className="hidden truncate text-sm text-ink-2 sm:inline">{user.email}</span>
-      <button
-        type="submit"
-        className="min-h-11 shrink-0 rounded-sm border border-rule px-4 text-sm font-medium"
-      >
-        {t(lang, "nav.logout")}
-      </button>
-    </form>
+    <div className="flex min-w-0 items-center gap-4">
+      <nav aria-label="Main" className="flex items-center gap-3 text-sm font-medium">
+        <Link
+          href={`/${lang}/history`}
+          className="inline-flex min-h-11 items-center text-ink hover:text-accent"
+        >
+          {t(lang, "nav.history")}
+        </Link>
+        <Link
+          href={`/${lang}/settings`}
+          className="inline-flex min-h-11 items-center text-ink hover:text-accent"
+        >
+          {t(lang, "nav.settings")}
+        </Link>
+      </nav>
+      <form action={signOut} className="flex min-w-0 items-center gap-3">
+        <input type="hidden" name="lang" value={lang} />
+        <span className="hidden truncate text-sm text-ink-2 sm:inline">{user.email}</span>
+        <button
+          type="submit"
+          className="min-h-11 shrink-0 rounded-sm border border-rule px-4 text-sm font-medium hover:bg-surface"
+        >
+          {t(lang, "nav.logout")}
+        </button>
+      </form>
+    </div>
   );
 }

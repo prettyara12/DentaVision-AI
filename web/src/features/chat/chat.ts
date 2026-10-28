@@ -11,6 +11,8 @@ export const MAX_HISTORY = 20;
 export const chatRequestSchema = z.object({
   locale: z.enum(locales),
   messages: z.array(chatMessageSchema).min(1).max(MAX_KEPT_MESSAGES),
+  chatId: z.string().uuid().optional(),
+  scanId: z.string().uuid().optional(),
   /** Present for chat about a scan: the findings (text only) and the insight summary, if any. */
   scan: z
     .object({
@@ -22,7 +24,8 @@ export const chatRequestSchema = z.object({
 
 export type ChatRequest = z.infer<typeof chatRequestSchema>;
 
-export type ChatEvent = { type: "delta"; text: string } | { type: "done" } | { type: "error" };
+export type ChatEvent =
+  { type: "delta"; text: string } | { type: "done"; chatId?: string } | { type: "error" };
 
 /** The last 20 messages, starting at a user turn (Gemini expects the user to speak first). */
 export function lastTurns(messages: ChatMessage[]): ChatMessage[] {

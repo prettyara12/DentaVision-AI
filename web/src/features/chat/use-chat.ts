@@ -12,7 +12,8 @@ export const GENERAL_CHAT_STORAGE_KEY = "dentavision:chat";
 export type ChatStatus = "idle" | "streaming" | "error";
 
 // Guests keep the conversation in this tab only (docs/user-flows.md §5).
-function remember(messages: ChatMessage[], scan: StoredScan | null) {
+function remember(messages: ChatMessage[], scan: StoredScan | null, isPersisted?: boolean) {
+  if (isPersisted) return;
   try {
     if (!scan) {
       sessionStorage.setItem(GENERAL_CHAT_STORAGE_KEY, JSON.stringify(messages));
@@ -29,10 +30,16 @@ function remember(messages: ChatMessage[], scan: StoredScan | null) {
 }
 
 /** Chat about `scan` (US-06), or general dental chat when `scan` is null (US-07). */
-export function useChat(lang: Locale, scan: StoredScan | null, initial: ChatMessage[]) {
+export function useChat(
+  lang: Locale,
+  scan: StoredScan | null,
+  initial: ChatMessage[],
+  options?: { chatId?: string },
+) {
   const [messages, setMessages] = useState(initial);
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState<ChatStatus>("idle");
+  const [activeChatId, setActiveChatId] = useState<string | undefined>(options?.chatId);
   const controller = useRef<AbortController | null>(null);
 
   // Hiding or leaving the page stops the answer; the question stays and can be asked again.
@@ -45,7 +52,7 @@ export function useChat(lang: Locale, scan: StoredScan | null, initial: ChatMess
     const current = new AbortController();
     controller.current = current;
     setMessages(history);
-    remember(history, scan);
+    remember(history, scan, Boolean(activeChatId ?? options?.chatId));
     setDraft("");
     setStatus("streaming");
 
@@ -62,6 +69,7 @@ export function useChat(lang: Locale, scan: StoredScan | null, initial: ChatMess
             scan: scan
               ? { detections: scan.result.detections, insightSummary: scan.insight?.data.summary }
               : undefined,
+            chatId: activeChatId,
           }),
           signal: current.signal,
         });
@@ -71,12 +79,15 @@ export function useChat(lang: Locale, scan: StoredScan | null, initial: ChatMess
             answer += event.text;
             setDraft(answer);
           } else if (event.type === "done") {
+            if (event.chatId && !activeChatId) {
+              setActiveChatId(event.chatId);
+            }
             const next: ChatMessage[] = [
               ...history.slice(1 - MAX_KEPT_MESSAGES),
               { role: "model", text: answer.slice(0, MAX_MODEL_CHARS) },
             ];
             setMessages(next);
-            remember(next, scan);
+            remember(next, scan, Boolean(activeChatId ?? options?.chatId));
             setDraft("");
             setStatus("idle");
             return;
