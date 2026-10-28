@@ -16,7 +16,7 @@
 | `/settings` | Bahasa, hapus akun | Login | Terang |
 | `/privacy`, `/about-model` | Transparansi | Publik | Terang |
 
-Semua rute halaman diberi prefix bahasa (`/id/scan`, `/en/scan`), lihat [architecture.md §4.4](architecture.md#44-i18n). Route Handler `/api/*` tidak diberi prefix.
+Semua rute halaman diberi prefix bahasa (`/id/scan`, `/en/scan`), lihat [architecture.md §4.5](architecture.md#45-i18n). Route Handler `/api/*` dan callback `/auth/callback` tidak diberi prefix (alur auth: [architecture.md §4.4](architecture.md#44-auth-supabasessr)).
 
 Area "Gelap" = workspace viewer ([design-system.md §1](design-system.md#1-konsep)).
 

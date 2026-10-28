@@ -157,7 +157,15 @@ Setiap handler: autentikasi (opsional untuk tamu) → otorisasi kepemilikan → 
 - Model dari env: `GEMINI_MODEL` (`gemini-3.5-flash-lite`), `GEMINI_FALLBACK_MODEL`. Pada 429 / `RESOURCE_EXHAUSTED`, coba model cadangan sekali.
 - Prompt, skema, dan guardrail: [ai-design.md](ai-design.md).
 
-### 4.4 i18n
+### 4.4 Auth (`@supabase/ssr`)
+
+- Login email/password dan Google lewat Supabase Auth, dengan verifikasi email dan reset password lewat tautan email (PKCE). Server Actions ada di `src/features/auth/actions.ts`, dan halamannya `/[lang]/login`, `/[lang]/register`, `/[lang]/reset-password` (`?mode=update` setelah tautan reset).
+- `GET /auth/callback?code=…&next=…` (tanpa prefix bahasa, didaftarkan di Supabase) menukar `code` jadi sesi cookie lalu redirect ke `next`. `next` hanya boleh path halaman di bawah `/id` atau `/en` (`safeNext`, mencegah open redirect). Kalau gagal (tautan kedaluwarsa, dibuka di browser lain, persetujuan Google dibatalkan), diarahkan ke `/[lang]/login?error=link`.
+- Client server-side di `src/lib/supabase/server.ts` (anon key + cookie sesi, jadi RLS berlaku). `src/proxy.ts` me-refresh token sesi sebelum render, hanya bila ada cookie `sb-…-auth-token`. Tamu tidak memicu panggilan Supabase.
+- Pesan galat tidak membuka apakah email terdaftar: daftar ulang dan minta reset selalu menjawab "tautan dikirim".
+- Header situs menampilkan "Masuk" atau email + "Keluar". Di halaman hasil, header ikut ruang gelap.
+
+### 4.5 i18n
 
 File `messages/{id,en}.json` + helper `t()` kecil di `src/lib/i18n.ts`. Semua halaman ada di bawah segmen `app/[lang]/` (`/id/...`, `/en/...`), sesuai panduan i18n resmi Next.js 16. Dengan `cacheComponents`, pola ini membuat halaman tetap bisa di-prerender statis, dan `<html lang>` benar per bahasa.
 

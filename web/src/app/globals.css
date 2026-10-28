@@ -36,7 +36,9 @@
 }
 
 :root[data-theme="dark"],
-[data-room="lightbox"] {
+[data-room="lightbox"],
+/* The site header joins the dark room on the result page. */
+body:has(> [data-room="lightbox"]) > header {
   --bg: #0a0d0e;
   --surface: #121718;
   --surface-2: #1a2022;
