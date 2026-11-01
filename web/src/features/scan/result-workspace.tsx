@@ -53,6 +53,7 @@ export function ResultWorkspace({
   lang: Locale;
   initialScan?: StoredScan;
   isSaved?: boolean;
+  /** undefined = session not known yet (Suspense fallback): no guest-only or import actions. */
   userLoggedIn?: boolean;
 }) {
   const router = useRouter();
@@ -315,7 +316,7 @@ function Workspace({
             )}
           </div>
         )}
-        {!userLoggedIn && !scan.sample && !isSaved && (
+        {userLoggedIn === false && !scan.sample && !isSaved && (
           <div className="flex flex-col gap-2 rounded-sm border border-rule bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-ink-2">{t(lang, "auth.login.lede")}</p>
             <button

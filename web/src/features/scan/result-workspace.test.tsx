@@ -49,6 +49,13 @@ describe("ResultWorkspace Guest Import UI", () => {
     expect(html).not.toContain("Simpan ke riwayat");
   });
 
+  it("does NOT render 'Simpan ke riwayat' while the session is still unknown (Suspense fallback)", () => {
+    const html = renderToString(
+      <ResultWorkspace lang="id" initialScan={mockScan} isSaved={false} />,
+    );
+    expect(html).not.toContain("Simpan ke riwayat");
+  });
+
   it("does NOT render 'Simpan ke riwayat' button when user is logged in", () => {
     const html = renderToString(
       <ResultWorkspace lang="id" initialScan={mockScan} isSaved={false} userLoggedIn={true} />,

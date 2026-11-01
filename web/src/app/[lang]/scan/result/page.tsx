@@ -22,7 +22,7 @@ export default async function ScanResultPage({ params }: PageProps<"/[lang]/scan
         <h1 className="text-[32px] leading-tight font-semibold tracking-[-0.02em] sm:text-[44px]">
           {t(lang, "result.title")}
         </h1>
-        <Suspense fallback={<ResultWorkspace lang={lang} userLoggedIn={false} />}>
+        <Suspense fallback={<ResultWorkspace lang={lang} />}>
           <ScanResultContent lang={lang} />
         </Suspense>
         <p className="border-t border-rule pt-4 text-sm text-ink-2">

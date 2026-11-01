@@ -9,6 +9,28 @@ import type { OperationResult, UserScanSummary, UserChatSummary, ScanDetail } fr
 export type { OperationResult, UserScanSummary, UserChatSummary, ScanDetail };
 
 /**
+ * Undoes a half-saved scan. The row goes first: its chat and messages follow by FK cascade
+ * (chats.scan_id, chat_messages.chat_id), and no row is left pointing at removed files.
+ * Cleanup errors are logged (left-over data must be visible), never thrown over the cause.
+ */
+async function rollbackScan(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  scanId: string,
+  paths: string[],
+  rowInserted: boolean,
+): Promise<void> {
+  if (rowInserted) {
+    const { error } = await supabase.from("scans").delete().eq("id", scanId).eq("user_id", userId);
+    if (error) console.error(`Rollback left scan row ${scanId}:`, error.message);
+  }
+  if (paths.length > 0) {
+    const { error } = await supabase.storage.from("scans").remove(paths);
+    if (error) console.error(`Rollback left Storage objects of scan ${scanId}:`, error.message);
+  }
+}
+
+/**
  * Saves an uploaded scan to Storage and inserts the scan metadata row into database.
  * If any step fails during upload or database insertion, any already uploaded Storage
  * objects are cleaned up (best-effort rollback) to avoid leaving orphan files.
@@ -71,15 +93,7 @@ export async function saveScanUpload(
     }
     scanRowInserted = true;
   } catch (error) {
-    if (uploadedPaths.length > 0) {
-      await supabase.storage
-        .from("scans")
-        .remove(uploadedPaths)
-        .catch(() => {});
-    }
-    if (scanRowInserted) {
-      await supabase.from("scans").delete().eq("id", scanId).eq("user_id", userId);
-    }
+    await rollbackScan(supabase, userId, scanId, uploadedPaths, scanRowInserted);
     throw error;
   }
 }
@@ -189,15 +203,7 @@ export async function saveScanImport(
       }
     }
   } catch (error) {
-    if (uploadedPaths.length > 0) {
-      await supabase.storage
-        .from("scans")
-        .remove(uploadedPaths)
-        .catch(() => {});
-    }
-    if (scanRowInserted) {
-      await supabase.from("scans").delete().eq("id", scanId).eq("user_id", userId);
-    }
+    await rollbackScan(supabase, userId, scanId, uploadedPaths, scanRowInserted);
     throw error;
   }
 }

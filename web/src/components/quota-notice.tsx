@@ -1,5 +1,10 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { t, type Locale } from "@/lib/i18n";
+
+const TICK_MS = 30_000;
 
 export interface QuotaNoticeProps {
   lang: Locale;
@@ -24,7 +29,14 @@ export function formatResetTime(lang: Locale, seconds: number): string {
 }
 
 export function QuotaNotice({ lang, role, resetInSeconds, className = "" }: QuotaNoticeProps) {
-  const timeRemaining = formatResetTime(lang, resetInSeconds);
+  // Count down against a fixed deadline so the shown time keeps moving while the banner is open.
+  const [deadline] = useState(() => Date.now() + resetInSeconds * 1000);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), TICK_MS);
+    return () => clearInterval(id);
+  }, []);
+  const timeRemaining = formatResetTime(lang, Math.ceil((deadline - now) / 1000));
   const descTemplate = t(lang, "quota.notice.desc");
   const desc = descTemplate.replace("{timeRemaining}", timeRemaining);
 

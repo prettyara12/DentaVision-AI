@@ -265,6 +265,64 @@ describe("History Data Operations", () => {
         `${userId}/${scanId}/heatmap-0.png`,
       ]);
     });
+
+    function failingMessagesMock(cleanupError: Error | null) {
+      const calls: string[] = [];
+      const deleteEq2 = vi.fn(async () => {
+        calls.push("delete scan row");
+        return { error: cleanupError };
+      });
+      const removeMock = vi.fn(async () => {
+        calls.push("remove storage");
+        return { data: [], error: cleanupError };
+      });
+      const supabase = {
+        storage: {
+          from: vi.fn(() => ({
+            upload: vi.fn().mockResolvedValue({ data: { path: "ok" }, error: null }),
+            remove: removeMock,
+          })),
+        },
+        from: vi.fn((table: string) => {
+          if (table === "scans")
+            return {
+              insert: vi.fn().mockResolvedValue({ error: null }),
+              delete: () => ({ eq: () => ({ eq: deleteEq2 }) }),
+            };
+          if (table === "chats")
+            return {
+              insert: () => ({
+                select: () => ({
+                  single: vi.fn().mockResolvedValue({ data: { id: "chat-1" }, error: null }),
+                }),
+              }),
+            };
+          return { insert: vi.fn().mockResolvedValue({ error: new Error("messages down") }) };
+        }),
+      } as unknown as SupabaseClient<Database>;
+      return { supabase, calls };
+    }
+    const importWithChat = (supabase: SupabaseClient<Database>) =>
+      saveScanImport(supabase, userId, scanId, {
+        imageBytes: Buffer.from([1]),
+        result: sampleResult,
+        chat: [{ role: "user", text: "Halo" }],
+      });
+
+    it("rolls back the scan row (chat cascades) before Storage when messages fail", async () => {
+      const { supabase, calls } = failingMessagesMock(null);
+      await expect(importWithChat(supabase)).rejects.toThrow(/chat messages: messages down/);
+      expect(calls).toEqual(["delete scan row", "remove storage"]);
+    });
+
+    it("logs a failed cleanup and still throws the original error", async () => {
+      const log = vi.spyOn(console, "error").mockImplementation(() => {});
+      const { supabase, calls } = failingMessagesMock(new Error("cleanup down"));
+      await expect(importWithChat(supabase)).rejects.toThrow(/chat messages: messages down/);
+      expect(calls).toEqual(["delete scan row", "remove storage"]);
+      expect(log).toHaveBeenCalledTimes(2);
+      log.mockRestore();
+    });
   });
 
   describe("deleteScan", () => {
