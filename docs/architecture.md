@@ -131,6 +131,17 @@ Hasil spike M1 (2026-10-25, #7): pada 5 panoramik contoh, heatmap P3 jatuh di da
 
 Setiap handler: autentikasi (opsional untuk tamu) → otorisasi kepemilikan → validasi Zod → kuota → aksi.
 
+**Kuota** (`web/src/lib/quota.ts`):
+
+- Subjek: `u:{user_id}` untuk login, `ip:{sha256(ip + IP_HASH_SALT)}` untuk tamu.
+- Scan:
+  - Sebelum memanggil Gemini, `/api/scans` membaca counter. Bila kuota habis, respons `429 quota_exceeded` beserta header `RateLimit-*` dan `Retry-After`.
+  - Kuota baru dipotong (`consume_quota`, atomik) setelah inferensi menghasilkan scan. Penolakan Gemini, `not_xray` dari pre-filter, dan `busy`/`loading`/`unavailable` tidak dihitung.
+  - Bila beberapa request paralel lolos pre-check, request yang kalah di `consume_quota` tidak menerima hasilnya. Ia mendapat event `error` `quota_exceeded`, tanpa header, karena stream sudah 200.
+- Chat: kuota dipotong setelah otorisasi dan validasi, sebelum memanggil Gemini. Bila habis, respons `429` dengan header yang sama.
+- Fail-closed: bila counter atau RPC gagal dibaca, scan menjawab `503 unavailable` (atau event `error` `unavailable` bila stream sudah berjalan), dan chat menjawab `503 unavailable`. Kegagalan ini tidak pernah dianggap "kuota kosong" maupun "kuota habis".
+- Batas kepercayaan IP: IP tamu dibaca dari `x-forwarded-for` (nilai pertama), lalu `x-real-ip`. Di Vercel, kedua header ditulis platform, dan `X-Forwarded-For` dari klien ditimpa ("do not forward external IPs"), sehingga tidak bisa dipalsukan. Bila di-deploy di luar Vercel, proxy di depan app wajib menghapus header masuk lalu mengisinya sendiri; tanpa itu tamu bisa berganti IP untuk mendapat kuota baru. Tanpa header (dev lokal), semua tamu berbagi `127.0.0.1`.
+
 **`POST /api/scans`**, `multipart/form-data` dengan `image` (JPEG/PNG terkompres) dan `locale` (`id`/`en`, default `id`).
 
 - Ditolak sebelum stream dimulai, dengan JSON `{ "code": ... }`: `411 length_required` (tanpa `Content-Length` yang valid, ditolak sebelum body dibaca), `400 invalid_request` (tanpa `image`), `413 too_large` (body/gambar > 4 MB), `415 unsupported_type` (magic bytes bukan JPEG/PNG). Dimensi diperiksa API inferensi (≤ 25 M piksel).

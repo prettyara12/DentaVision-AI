@@ -60,6 +60,9 @@ export function getResetSeconds(now = Date.now()): number {
 
 /**
  * Extracts client IP from request headers or defaults to localhost.
+ * Trust boundary: on Vercel these headers are written by the platform, which overwrites any
+ * client-sent X-Forwarded-For (docs/architecture.md §4.1). Behind another host they must be
+ * set by a proxy that drops incoming values, or guests could rotate IPs for fresh quota.
  */
 export function getClientIp(request: Request): string {
   const forwarded = request.headers.get("x-forwarded-for");
@@ -142,17 +145,8 @@ export async function checkQuota(
     .eq("kind", kind)
     .maybeSingle();
 
-  if (error) {
-    // If table read fails, log and fallback to permissive to prevent total outage
-    console.error("Failed to check quota:", error.message);
-    return {
-      ok: true,
-      count: 0,
-      limit: max,
-      remaining: max,
-      resetInSeconds,
-    };
-  }
+  // Fail closed: an unreadable counter must not unlock paid Gemini calls; routes answer "unavailable".
+  if (error) throw new Error(`Failed to check quota: ${error.message}`);
 
   const count = data?.count ?? 0;
   return {
@@ -183,15 +177,8 @@ export async function consumeQuota(
     max,
   });
 
-  if (error) {
-    console.error("Failed to consume quota:", error.message);
-    // Fail-closed on unexpected RPC error to prevent quota bypass
-    return {
-      ok: false,
-      limit: max,
-      resetInSeconds,
-    };
-  }
+  // Fail closed, but as an outage rather than a false "quota used up".
+  if (error) throw new Error(`Failed to consume quota: ${error.message}`);
 
   return {
     ok: Boolean(data),

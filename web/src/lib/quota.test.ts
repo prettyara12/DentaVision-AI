@@ -162,7 +162,7 @@ describe("checkQuota & consumeQuota", () => {
     expect(res.count).toBe(5);
   });
 
-  it("checkQuota falls back gracefully on table query error", async () => {
+  it("checkQuota throws (fails closed) on table query error", async () => {
     const supabase = {
       from: vi.fn().mockReturnValue({
         select: vi.fn().mockReturnValue({
@@ -175,14 +175,9 @@ describe("checkQuota & consumeQuota", () => {
       }),
     };
 
-    const res = await checkQuota(
-      supabase as unknown as SupabaseClient<Database>,
-      "ip:abc",
-      "scan",
-      5,
-    );
-    expect(res.ok).toBe(true);
-    expect(res.count).toBe(0);
+    await expect(
+      checkQuota(supabase as unknown as SupabaseClient<Database>, "ip:abc", "scan", 5),
+    ).rejects.toThrow("DB connection failed");
   });
 
   it("consumeQuota calls consume_quota RPC", async () => {
@@ -224,12 +219,8 @@ describe("checkQuota & consumeQuota", () => {
       rpc: vi.fn().mockResolvedValue({ data: null, error: new Error("RPC timeout") }),
     };
 
-    const res = await consumeQuota(
-      supabase as unknown as SupabaseClient<Database>,
-      "ip:abc",
-      "scan",
-      5,
-    );
-    expect(res.ok).toBe(false);
+    await expect(
+      consumeQuota(supabase as unknown as SupabaseClient<Database>, "ip:abc", "scan", 5),
+    ).rejects.toThrow("RPC timeout");
   });
 });

@@ -54,7 +54,13 @@ export async function POST(request: Request) {
   const subjectInfo = getQuotaSubject(user, request);
   const limit = getQuotaLimit(subjectInfo.role, "scan");
   const adminClient = createAdminClient();
-  const quotaCheck = await checkQuota(adminClient, subjectInfo.subject, "scan", limit);
+  let quotaCheck;
+  try {
+    quotaCheck = await checkQuota(adminClient, subjectInfo.subject, "scan", limit);
+  } catch (error) {
+    console.error("POST /api/scans quota check failed", error);
+    return Response.json({ code: "unavailable" }, { status: 503 });
+  }
   if (!quotaCheck.ok) {
     return Response.json(
       {
@@ -79,21 +85,21 @@ export async function POST(request: Request) {
           return;
         }
 
-        // Daily quota is consumed only if validation succeeds (docs/PRD.md §7).
-        const consumed = await consumeQuota(adminClient, subjectInfo.subject, "scan", limit);
-        if (!consumed.ok) {
-          send({
-            type: "error",
-            code: "quota_exceeded",
-            resetInSeconds: consumed.resetInSeconds,
-            role: subjectInfo.role,
-          });
-          return;
-        }
-
         send({ type: "stage", stage: "analyzing" });
         const outcome = await analyzeImage(new Blob([bytes], { type: mimeType }));
         if (outcome.kind === "result") {
+          // Only a delivered scan counts (docs/PRD.md §7): rejections and busy/unavailable never
+          // do. A parallel burst past the pre-check loses its result here rather than its quota.
+          const consumed = await consumeQuota(adminClient, subjectInfo.subject, "scan", limit);
+          if (!consumed.ok) {
+            send({
+              type: "error",
+              code: "quota_exceeded",
+              resetInSeconds: consumed.resetInSeconds,
+              role: subjectInfo.role,
+            });
+            return;
+          }
           if (user && shouldSave && supabase) {
             const scanId = crypto.randomUUID();
             await saveScanUpload(supabase, user.id, scanId, bytes, outcome.result);

@@ -429,4 +429,13 @@ describe("POST /api/chat", () => {
     });
     expect(streamChat).not.toHaveBeenCalled();
   });
+
+  it("fails closed with 503 when the quota RPC errors", async () => {
+    consumeQuota.mockRejectedValueOnce(new Error("rpc down"));
+
+    const response = await post({ locale: "id", messages: [question] });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ code: "unavailable" });
+    expect(streamChat).not.toHaveBeenCalled();
+  });
 });

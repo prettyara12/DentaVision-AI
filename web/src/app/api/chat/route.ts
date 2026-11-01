@@ -103,7 +103,13 @@ export async function POST(request: Request) {
   const subjectInfo = getQuotaSubject(user, request);
   const limit = getQuotaLimit(subjectInfo.role, "chat");
   const adminClient = createAdminClient();
-  const quota = await consumeQuota(adminClient, subjectInfo.subject, "chat", limit);
+  let quota;
+  try {
+    quota = await consumeQuota(adminClient, subjectInfo.subject, "chat", limit);
+  } catch (error) {
+    console.error("POST /api/chat quota failed", error);
+    return fail(503, "unavailable");
+  }
   if (!quota.ok) {
     return Response.json(
       {

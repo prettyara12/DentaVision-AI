@@ -300,14 +300,16 @@ describe("POST /api/scans", () => {
     expect(consumeQuota).not.toHaveBeenCalled();
   });
 
-  it("emits error quota_exceeded when consumeQuota fails after validation", async () => {
+  it("withholds the result when the atomic consume finds the quota used up", async () => {
     validateXray.mockResolvedValue(null);
+    analyzeImage.mockResolvedValue({ kind: "result", result: RESULT });
     consumeQuota.mockResolvedValueOnce({ ok: false, limit: 5, resetInSeconds: 1800 });
 
     const response = await POST(await upload(JPEG));
     const resultEvents = await events(response);
     expect(resultEvents).toEqual([
       { type: "stage", stage: "validating" },
+      { type: "stage", stage: "analyzing" },
       {
         type: "error",
         code: "quota_exceeded",
@@ -315,6 +317,39 @@ describe("POST /api/scans", () => {
         role: "guest",
       },
     ]);
-    expect(analyzeImage).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ kind: "not_xray" }, { type: "rejected", reason: null }],
+    [
+      { kind: "error", code: "busy" },
+      { type: "error", code: "busy" },
+    ],
+  ])("does not consume quota when inference gives no scan (%o)", async (outcome, last) => {
+    validateXray.mockResolvedValue(null);
+    analyzeImage.mockResolvedValueOnce(outcome);
+
+    const resultEvents = await events(await POST(await upload(JPEG)));
+    expect(resultEvents.at(-1)).toEqual(last);
+    expect(consumeQuota).not.toHaveBeenCalled();
+  });
+
+  it("fails closed with 503 when the quota counter cannot be read", async () => {
+    checkQuota.mockRejectedValueOnce(new Error("db down"));
+
+    const response = await POST(await upload(JPEG));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ code: "unavailable" });
+    expect(validateXray).not.toHaveBeenCalled();
+  });
+
+  it("reports unavailable, not quota_exceeded, when consuming quota errors", async () => {
+    validateXray.mockResolvedValue(null);
+    analyzeImage.mockResolvedValue({ kind: "result", result: RESULT });
+    consumeQuota.mockRejectedValueOnce(new Error("rpc down"));
+
+    const resultEvents = await events(await POST(await upload(JPEG)));
+    expect(consumeQuota).toHaveBeenCalledTimes(1);
+    expect(resultEvents.at(-1)).toEqual({ type: "error", code: "unavailable" });
   });
 });
