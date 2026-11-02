@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import { ScanFlow } from "@/features/scan/scan-flow";
-import { isLocale, t } from "@/lib/i18n";
+import { isLocale, t, type Locale } from "@/lib/i18n";
+import { currentUser } from "@/lib/supabase/server";
 
 export async function generateMetadata({ params }: PageProps<"/[lang]/scan">): Promise<Metadata> {
   const { lang } = await params;
@@ -20,8 +22,16 @@ export default async function ScanPage({ params }: PageProps<"/[lang]/scan">) {
         </h1>
         <p className="text-ink-2">{t(lang, "scan.lede")}</p>
       </header>
-      <ScanFlow lang={lang} />
+      {/* The session is read at request time; until then the flow works, just without "Don't save". */}
+      <Suspense fallback={<ScanFlow lang={lang} />}>
+        <ScanFlowForUser lang={lang} />
+      </Suspense>
       <p className="border-t border-rule pt-4 text-sm text-ink-2">{t(lang, "disclaimer.short")}</p>
     </main>
   );
+}
+
+async function ScanFlowForUser({ lang }: { lang: Locale }) {
+  const user = await currentUser();
+  return <ScanFlow lang={lang} userLoggedIn={Boolean(user)} />;
 }
