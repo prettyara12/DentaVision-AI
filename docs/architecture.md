@@ -137,8 +137,12 @@ Setiap handler: autentikasi (opsional untuk tamu) → otorisasi kepemilikan → 
 - Scan:
   - Sebelum memanggil Gemini, `/api/scans` membaca counter. Bila kuota habis, respons `429 quota_exceeded` beserta header `RateLimit-*` dan `Retry-After`.
   - Kuota baru dipotong (`consume_quota`, atomik) setelah inferensi menghasilkan scan. Penolakan Gemini, `not_xray` dari pre-filter, dan `busy`/`loading`/`unavailable` tidak dihitung.
+  - Untuk pengguna login yang menyimpan, scan disimpan **sebelum** kuota dipotong, sehingga simpan yang gagal tidak memakai kuota. Bila pemotongan kuota ditolak atau RPC error, scan yang baru tersimpan dihapus lagi (`deleteScan`, Storage dulu) sebelum event error dikirim.
   - Bila beberapa request paralel lolos pre-check, request yang kalah di `consume_quota` tidak menerima hasilnya. Ia mendapat event `error` `quota_exceeded`, tanpa header, karena stream sudah 200.
-- Chat: kuota dipotong setelah otorisasi dan validasi, sebelum memanggil Gemini. Bila habis, respons `429` dengan header yang sama.
+- Chat:
+  - Kuota dipotong setelah otorisasi dan validasi (kepemilikan `chatId`/`scanId` diperiksa lebih dulu), sebelum memanggil Gemini. Bila habis, respons `429` dengan header yang sama.
+  - Baris `chats` baru dibuat setelah kuota berhasil dipotong, sehingga respons `429`/`503` tidak meninggalkan chat kosong.
+  - Kuota chat dihitung per pesan yang diproses: kegagalan Gemini atau database setelah kuota dipotong tetap terhitung.
 - Fail-closed: bila counter atau RPC gagal dibaca, scan menjawab `503 unavailable` (atau event `error` `unavailable` bila stream sudah berjalan), dan chat menjawab `503 unavailable`. Kegagalan ini tidak pernah dianggap "kuota kosong" maupun "kuota habis".
 - Batas kepercayaan IP: IP tamu dibaca dari `x-forwarded-for` (nilai pertama), lalu `x-real-ip`. Di Vercel, kedua header ditulis platform, dan `X-Forwarded-For` dari klien ditimpa ("do not forward external IPs"), sehingga tidak bisa dipalsukan. Bila di-deploy di luar Vercel, proxy di depan app wajib menghapus header masuk lalu mengisinya sendiri; tanpa itu tamu bisa berganti IP untuk mendapat kuota baru. Tanpa header (dev lokal), semua tamu berbagi `127.0.0.1`.
 

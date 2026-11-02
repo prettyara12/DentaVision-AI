@@ -7,6 +7,7 @@ const analyzeImage = vi.hoisted(() => vi.fn());
 const currentUser = vi.hoisted(() => vi.fn());
 const createClient = vi.hoisted(() => vi.fn());
 const saveScanUpload = vi.hoisted(() => vi.fn());
+const deleteScan = vi.hoisted(() => vi.fn());
 const checkQuota = vi.hoisted(() =>
   vi.fn().mockResolvedValue({ ok: true, limit: 5, remaining: 5, resetInSeconds: 3600 }),
 );
@@ -42,6 +43,7 @@ vi.mock("@/lib/quota", () => ({
 }));
 vi.mock("@/features/history/data", () => ({
   saveScanUpload,
+  deleteScan,
 }));
 
 const { POST } = await import("./route");
@@ -90,6 +92,7 @@ beforeEach(() => {
   currentUser.mockReset().mockResolvedValue(null);
   createClient.mockReset();
   saveScanUpload.mockReset();
+  deleteScan.mockReset().mockResolvedValue({ ok: true });
   checkQuota
     .mockReset()
     .mockResolvedValue({ ok: true, limit: 5, remaining: 5, resetInSeconds: 3600 });
@@ -351,5 +354,45 @@ describe("POST /api/scans", () => {
     const resultEvents = await events(await POST(await upload(JPEG)));
     expect(consumeQuota).toHaveBeenCalledTimes(1);
     expect(resultEvents.at(-1)).toEqual({ type: "error", code: "unavailable" });
+  });
+  describe("logged-in save and quota order", () => {
+    async function loggedInScan() {
+      currentUser.mockResolvedValue({ id: "user-123", email: "user@test.com" });
+      createClient.mockResolvedValue({ client: "supabase" });
+      validateXray.mockResolvedValue(null);
+      analyzeImage.mockResolvedValue({ kind: "result", result: RESULT });
+      return events(await POST(await upload(JPEG)));
+    }
+    const savedId = () => saveScanUpload.mock.calls[0]?.[2];
+
+    it("saves before consuming, so a failed save costs no quota", async () => {
+      saveScanUpload.mockRejectedValueOnce(new Error("storage down"));
+      const resultEvents = await loggedInScan();
+      expect(resultEvents.at(-1)).toEqual({ type: "error", code: "unavailable" });
+      expect(consumeQuota).not.toHaveBeenCalled();
+    });
+
+    it("discards the just-saved scan when the quota is used up", async () => {
+      saveScanUpload.mockResolvedValueOnce(undefined);
+      consumeQuota.mockResolvedValueOnce({ ok: false, limit: 20, resetInSeconds: 600 });
+      const resultEvents = await loggedInScan();
+      expect(deleteScan).toHaveBeenCalledWith({ client: "supabase" }, "user-123", savedId());
+      expect(resultEvents.at(-1)).toMatchObject({ type: "error", code: "quota_exceeded" });
+    });
+
+    it("discards the just-saved scan when the quota RPC errors", async () => {
+      saveScanUpload.mockResolvedValueOnce(undefined);
+      consumeQuota.mockRejectedValueOnce(new Error("rpc down"));
+      const resultEvents = await loggedInScan();
+      expect(deleteScan).toHaveBeenCalledWith({ client: "supabase" }, "user-123", savedId());
+      expect(resultEvents.at(-1)).toEqual({ type: "error", code: "unavailable" });
+    });
+
+    it("keeps the saved scan once the quota is consumed", async () => {
+      saveScanUpload.mockResolvedValueOnce(undefined);
+      const resultEvents = await loggedInScan();
+      expect(deleteScan).not.toHaveBeenCalled();
+      expect(resultEvents.at(-1)).toEqual({ type: "result", result: RESULT, scanId: savedId() });
+    });
   });
 });

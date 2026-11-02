@@ -438,4 +438,46 @@ describe("POST /api/chat", () => {
     expect(await response.json()).toEqual({ code: "unavailable" });
     expect(streamChat).not.toHaveBeenCalled();
   });
+  describe("new chats are created only after the quota is consumed", () => {
+    const scanId = "660e8400-e29b-41d4-a716-446655440000";
+    function loggedIn() {
+      currentUser.mockResolvedValue({ id: "user-123", email: "user@test.com" });
+      const insertChat = vi.fn();
+      const found = (data: unknown) =>
+        vi.fn(() => ({
+          eq: () => ({
+            eq: () => ({ maybeSingle: vi.fn().mockResolvedValue({ data, error: null }) }),
+          }),
+        }));
+      createClient.mockResolvedValue({
+        from: vi.fn((table: string) => {
+          if (table === "scans") return { select: found({ id: scanId }) };
+          if (table === "chats") return { select: found(null), insert: insertChat };
+          return { insert: vi.fn() };
+        }),
+      });
+      return insertChat;
+    }
+
+    it.each([
+      ["general chat", {}],
+      ["new scan chat", { scanId }],
+    ])("does not create a %s on 429", async (_, extra) => {
+      const insertChat = loggedIn();
+      consumeQuota.mockResolvedValueOnce({ ok: false, limit: 100, resetInSeconds: 60 });
+
+      const response = await post({ locale: "id", messages: [question], ...extra });
+      expect(response.status).toBe(429);
+      expect(insertChat).not.toHaveBeenCalled();
+    });
+
+    it("does not create a chat when the quota RPC errors", async () => {
+      const insertChat = loggedIn();
+      consumeQuota.mockRejectedValueOnce(new Error("rpc down"));
+
+      const response = await post({ locale: "id", messages: [question] });
+      expect(response.status).toBe(503);
+      expect(insertChat).not.toHaveBeenCalled();
+    });
+  });
 });

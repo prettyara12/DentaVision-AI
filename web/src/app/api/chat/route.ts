@@ -29,6 +29,8 @@ export async function POST(request: Request) {
   const supabase = user ? await createClient() : null;
 
   let activeChatId: string | undefined = undefined;
+  // Created only after the quota is consumed, so a 429/503 never leaves an empty chat.
+  let newChat: { scan_id: string | null; title: string } | null = null;
 
   if (user && supabase) {
     if (chatId) {
@@ -62,40 +64,10 @@ export async function POST(request: Request) {
         .eq("user_id", user.id)
         .maybeSingle();
 
-      if (scanChat) {
-        activeChatId = scanChat.id;
-      } else {
-        const { data: newChat, error: chatErr } = await supabase
-          .from("chats")
-          .insert({
-            user_id: user.id,
-            scan_id: scanId,
-            title: "Chat Scan",
-          })
-          .select("id")
-          .single();
-
-        if (chatErr || !newChat) {
-          return fail(500, "database_error");
-        }
-        activeChatId = newChat.id;
-      }
+      if (scanChat) activeChatId = scanChat.id;
+      else newChat = { scan_id: scanId, title: "Chat Scan" };
     } else {
-      const userQuestion = history.at(-1)?.text ?? "Diskusi";
-      const { data: newChat, error: chatErr } = await supabase
-        .from("chats")
-        .insert({
-          user_id: user.id,
-          scan_id: null,
-          title: userQuestion.slice(0, 50),
-        })
-        .select("id")
-        .single();
-
-      if (chatErr || !newChat) {
-        return fail(500, "database_error");
-      }
-      activeChatId = newChat.id;
+      newChat = { scan_id: null, title: (history.at(-1)?.text ?? "Diskusi").slice(0, 50) };
     }
   }
 
@@ -122,6 +94,16 @@ export async function POST(request: Request) {
         headers: quotaHeaders({ limit, remaining: 0, resetInSeconds: quota.resetInSeconds }),
       },
     );
+  }
+
+  if (user && supabase && newChat) {
+    const { data: created, error: chatErr } = await supabase
+      .from("chats")
+      .insert({ user_id: user.id, ...newChat })
+      .select("id")
+      .single();
+    if (chatErr || !created) return fail(500, "database_error");
+    activeChatId = created.id;
   }
 
   if (user && supabase && activeChatId) {
