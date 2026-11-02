@@ -256,7 +256,7 @@ Implementasi: `supabase/migrations/20261026000000_initial_schema.sql`. Tes: `sup
 
 ### 5.2 Storage
 
-- Bucket `scans`, **privat**, maks 5 MB per objek, hanya `image/jpeg` / `image/png`. Path `{user_id}/{scan_id}/original.jpg` dan `{user_id}/{scan_id}/heatmap-{class_id}.png`.
+- Bucket `scans`, **privat**, maks 5 MB per objek, hanya `image/jpeg` / `image/png`. Path `{user_id}/{scan_id}/original.jpg` dan `{user_id}/{scan_id}/heatmap-{class_id}.png`. Nama `original.jpg` kanonis (dikunci check constraint `scans.image_path` dan policy Storage), bukan penanda format. Browser selalu mengirim JPEG (§4.2), tetapi bila klien API mengirim PNG, objek tetap bernama `original.jpg` dengan `contentType` sesuai magic bytes (`image/png`).
 - Policy: user hanya bisa membaca/menulis/menghapus objek dengan path kanonis di bawah prefix `{auth.uid()}/` (`{scan_id}/original.jpg` atau `{scan_id}/heatmap-{0..30}.png`, lewat `public.is_own_scan_object`). Nama lain ditolak.
 - Browser membaca lewat signed URL (berlaku 1 jam) dari server.
 - Hapus scan/akun menghapus objek Storage lebih dulu, baru baris DB. Kalau hapus Storage gagal, baris DB tidak dihapus dan user mendapat error.

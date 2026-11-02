@@ -40,6 +40,7 @@ export async function saveScanUpload(
   userId: string,
   scanId: string,
   imageBytes: Uint8Array | Buffer,
+  contentType: string,
   result: AnalyzeResult,
 ): Promise<void> {
   const uploadedPaths: string[] = [];
@@ -50,7 +51,8 @@ export async function saveScanUpload(
     const { error: originalUploadError } = await supabase.storage
       .from("scans")
       .upload(originalPath, imageBytes, {
-        contentType: "image/jpeg",
+        // The name is canonical (DB check + Storage policy, architecture §5.2); the type is not.
+        contentType,
         upsert: true,
       });
 
@@ -100,6 +102,7 @@ export async function saveScanUpload(
 
 export interface SaveScanImportOptions {
   imageBytes: Uint8Array | Buffer;
+  contentType: string;
   result: AnalyzeResult;
   insight?: {
     locale: "id" | "en";
@@ -120,7 +123,7 @@ export async function saveScanImport(
   scanId: string,
   options: SaveScanImportOptions,
 ): Promise<void> {
-  const { imageBytes, result, insight, chat } = options;
+  const { imageBytes, contentType, result, insight, chat } = options;
   const uploadedPaths: string[] = [];
   let scanRowInserted = false;
 
@@ -129,7 +132,8 @@ export async function saveScanImport(
     const { error: originalUploadError } = await supabase.storage
       .from("scans")
       .upload(originalPath, imageBytes, {
-        contentType: "image/jpeg",
+        // The name is canonical (DB check + Storage policy, architecture §5.2); the type is not.
+        contentType,
         upsert: true,
       });
 

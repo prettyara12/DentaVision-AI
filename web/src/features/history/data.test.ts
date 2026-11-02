@@ -34,7 +34,7 @@ describe("History Data Operations", () => {
   };
 
   describe("saveScanUpload", () => {
-    it("uploads original image, heatmaps, and inserts scan into DB", async () => {
+    it("uploads a PNG under the canonical name with its real type, heatmaps, and the row", async () => {
       const uploadMock = vi.fn().mockResolvedValue({ data: { path: "ok" }, error: null });
       const insertMock = vi.fn().mockResolvedValue({ data: null, error: null });
 
@@ -51,7 +51,7 @@ describe("History Data Operations", () => {
 
       const imageBytes = new Uint8Array([1, 2, 3]);
 
-      await saveScanUpload(supabaseMock, userId, scanId, imageBytes, sampleResult);
+      await saveScanUpload(supabaseMock, userId, scanId, imageBytes, "image/png", sampleResult);
 
       expect(supabaseMock.storage.from).toHaveBeenCalledWith("scans");
 
@@ -59,7 +59,7 @@ describe("History Data Operations", () => {
       expect(uploadMock).toHaveBeenCalledWith(
         `${userId}/${scanId}/original.jpg`,
         imageBytes,
-        expect.objectContaining({ contentType: "image/jpeg", upsert: true }),
+        expect.objectContaining({ contentType: "image/png", upsert: true }),
       );
 
       // Verify heatmap upload
@@ -99,7 +99,14 @@ describe("History Data Operations", () => {
       } as unknown as SupabaseClient<Database>;
 
       await expect(
-        saveScanUpload(supabaseMock, userId, scanId, new Uint8Array([1]), sampleResult),
+        saveScanUpload(
+          supabaseMock,
+          userId,
+          scanId,
+          new Uint8Array([1]),
+          "image/jpeg",
+          sampleResult,
+        ),
       ).rejects.toThrow(/Failed to upload original scan image/);
 
       expect(insertMock).not.toHaveBeenCalled();
@@ -120,7 +127,14 @@ describe("History Data Operations", () => {
       } as unknown as SupabaseClient<Database>;
 
       await expect(
-        saveScanUpload(supabaseMock, userId, scanId, new Uint8Array([1]), sampleResult),
+        saveScanUpload(
+          supabaseMock,
+          userId,
+          scanId,
+          new Uint8Array([1]),
+          "image/jpeg",
+          sampleResult,
+        ),
       ).rejects.toThrow(/Failed to insert scan record/);
 
       expect(removeMock).toHaveBeenCalledWith([
@@ -153,7 +167,14 @@ describe("History Data Operations", () => {
       } as unknown as SupabaseClient<Database>;
 
       await expect(
-        saveScanUpload(supabaseMock, userId, scanId, new Uint8Array([1]), sampleResult),
+        saveScanUpload(
+          supabaseMock,
+          userId,
+          scanId,
+          new Uint8Array([1]),
+          "image/jpeg",
+          sampleResult,
+        ),
       ).rejects.toThrow(/Failed to upload heatmap 0/);
 
       // Should have cleaned up the original image
@@ -201,6 +222,7 @@ describe("History Data Operations", () => {
 
       await saveScanImport(supabaseMock, userId, scanId, {
         imageBytes,
+        contentType: "image/jpeg",
         result: sampleResult,
         insight: sampleInsight,
         chat: sampleChat,
@@ -256,6 +278,7 @@ describe("History Data Operations", () => {
       await expect(
         saveScanImport(supabaseMock, userId, scanId, {
           imageBytes: Buffer.from([1]),
+          contentType: "image/jpeg",
           result: sampleResult,
         }),
       ).rejects.toThrow(/Failed to insert scan record/);
@@ -305,6 +328,7 @@ describe("History Data Operations", () => {
     const importWithChat = (supabase: SupabaseClient<Database>) =>
       saveScanImport(supabase, userId, scanId, {
         imageBytes: Buffer.from([1]),
+        contentType: "image/jpeg",
         result: sampleResult,
         chat: [{ role: "user", text: "Halo" }],
       });

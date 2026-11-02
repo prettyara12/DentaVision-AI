@@ -94,7 +94,14 @@ export async function POST(request: Request) {
           const saved = user && shouldSave && supabase ? { supabase, userId: user.id } : null;
           const scanId = saved ? crypto.randomUUID() : undefined;
           if (saved && scanId)
-            await saveScanUpload(saved.supabase, saved.userId, scanId, bytes, outcome.result);
+            await saveScanUpload(
+              saved.supabase,
+              saved.userId,
+              scanId,
+              bytes,
+              mimeType,
+              outcome.result,
+            );
           const discard = async () => {
             if (!saved || !scanId) return;
             const removed = await deleteScan(saved.supabase, saved.userId, scanId);

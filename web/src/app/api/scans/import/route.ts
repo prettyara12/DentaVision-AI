@@ -80,6 +80,7 @@ export async function POST(request: Request) {
   try {
     await saveScanImport(supabase, user.id, scanId, {
       imageBytes,
+      contentType: mimeType,
       result,
       insight,
       chat,

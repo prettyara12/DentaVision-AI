@@ -49,6 +49,7 @@ vi.mock("@/features/history/data", () => ({
 const { POST } = await import("./route");
 
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0]);
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0]);
 const RESULT = {
   model_version: "yolov8m-resnet50@60bfdce6",
   image: { width: 2048, height: 1024 },
@@ -237,6 +238,7 @@ describe("POST /api/scans", () => {
       "user-123",
       expect.any(String),
       expect.any(Uint8Array),
+      "image/jpeg",
       RESULT,
     );
     const lastEvent = resultEvents.at(-1);
@@ -245,6 +247,17 @@ describe("POST /api/scans", () => {
       result: RESULT,
       scanId: expect.any(String),
     });
+  });
+
+  it("saves a PNG upload with its sniffed type, not JPEG", async () => {
+    currentUser.mockResolvedValue({ id: "user-123", email: "user@test.com" });
+    createClient.mockResolvedValue({ client: "supabase" });
+    saveScanUpload.mockResolvedValue(undefined);
+    validateXray.mockResolvedValue(null);
+    analyzeImage.mockResolvedValue({ kind: "result", result: RESULT });
+
+    await events(await POST(await upload(PNG)));
+    expect(saveScanUpload.mock.calls[0]?.[4]).toBe("image/png");
   });
 
   it("does not save scan and emits no scanId when user is logged in but save is 'false'", async () => {

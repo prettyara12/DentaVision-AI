@@ -98,6 +98,7 @@ describe("POST /api/scans/import", () => {
       "user-123",
       data.scanId,
       expect.objectContaining({
+        contentType: "image/jpeg",
         result: sampleResult,
         chat: [{ role: "user", text: "Halo" }],
       }),
