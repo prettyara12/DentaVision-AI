@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import en from "../../messages/en.json";
 import id from "../../messages/id.json";
-import { resolveLocale, t } from "./i18n";
+import { resolveLocale, t, withLocale } from "./i18n";
 
 describe("resolveLocale", () => {
   it("prefers a valid cookie over Accept-Language", () => {
@@ -24,6 +24,17 @@ describe("messages", () => {
   });
 
   it("returns the text for the locale", () => {
-    expect(t("en", "home.status")).toBe("In development");
+    expect(t("en", "theme.dark")).toBe("Dark");
+  });
+});
+
+describe("withLocale", () => {
+  it("swaps only the leading locale segment and keeps the rest", () => {
+    expect(withLocale("/id", "en")).toBe("/en");
+    expect(withLocale("/id/scans/abc?x=1", "en")).toBe("/en/scans/abc?x=1");
+    expect(withLocale("/en/reset-password?mode=update", "id")).toBe(
+      "/id/reset-password?mode=update",
+    );
+    expect(withLocale("/idea/id", "en")).toBe("/idea/id");
   });
 });

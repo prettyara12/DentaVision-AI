@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRef, useState } from "react";
 import { t, type Locale, type MessageKey } from "@/lib/i18n";
 import { samples, type SampleKey } from "./samples";
@@ -10,9 +11,11 @@ type Props = {
   problem: MessageKey | null;
   onFile: (file: File) => void;
   onSample: (key: SampleKey) => void;
+  /** Only for a signed-in user (PRD US-11); guests never have anything saved. */
+  dontSave?: { checked: boolean; onChange: (checked: boolean) => void };
 };
 
-export function Dropzone({ lang, problem, onFile, onSample }: Props) {
+export function Dropzone({ lang, problem, onFile, onSample, dontSave }: Props) {
   const input = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -60,6 +63,28 @@ export function Dropzone({ lang, problem, onFile, onSample }: Props) {
             {t(lang, problem)}
           </p>
         )}
+      </div>
+      <div className="flex flex-col gap-3 text-sm">
+        {dontSave && (
+          <label className="flex min-h-11 cursor-pointer items-start gap-3">
+            <input
+              type="checkbox"
+              checked={dontSave.checked}
+              onChange={(event) => dontSave.onChange(event.target.checked)}
+              className="mt-1 size-4 shrink-0 accent-[var(--accent)]"
+            />
+            <span className="flex flex-col">
+              <span className="font-medium">{t(lang, "drop.dont_save")}</span>
+              <span className="text-ink-2">{t(lang, "drop.dont_save_hint")}</span>
+            </span>
+          </label>
+        )}
+        <p className="text-ink-2">
+          {t(lang, "drop.privacy")}{" "}
+          <Link href={`/${lang}/privacy`} className="text-accent underline">
+            {t(lang, "footer.privacy")}
+          </Link>
+        </p>
       </div>
       <section aria-labelledby="samples-title" className="flex flex-col gap-3">
         <h2 id="samples-title" className="font-mono text-xs tracking-[0.06em] text-ink-2 uppercase">

@@ -49,9 +49,11 @@ async function waitUntilReady(onWaking: () => void): Promise<boolean> {
   }
 }
 
-export function ScanFlow({ lang }: { lang: Locale }) {
+/** `userLoggedIn` is undefined until the session is known; only a signed-in user gets "Don't save". */
+export function ScanFlow({ lang, userLoggedIn }: { lang: Locale; userLoggedIn?: boolean }) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>({ name: "idle", problem: null });
+  const [dontSave, setDontSave] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const retry = useRef<() => void>(() => {});
   const openedResult = useRef(false);
@@ -92,6 +94,8 @@ export function ScanFlow({ lang }: { lang: Locale }) {
     const body = new FormData();
     body.append("image", image, "scan.jpg");
     body.append("locale", lang);
+    // US-11: the server then treats the scan like a guest scan (docs/architecture.md §4.1).
+    if (dontSave) body.append("save", "false");
     let response: Response;
     try {
       response = await fetch("/api/scans", { method: "POST", body });
@@ -178,7 +182,15 @@ export function ScanFlow({ lang }: { lang: Locale }) {
   }
 
   if (phase.name === "idle") {
-    return <Dropzone lang={lang} problem={phase.problem} onFile={run} onSample={trySample} />;
+    return (
+      <Dropzone
+        lang={lang}
+        problem={phase.problem}
+        onFile={run}
+        onSample={trySample}
+        dontSave={userLoggedIn ? { checked: dontSave, onChange: setDontSave } : undefined}
+      />
+    );
   }
   if (phase.name === "quota_exceeded") {
     return (

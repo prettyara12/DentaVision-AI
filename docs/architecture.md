@@ -184,7 +184,15 @@ Setiap handler: autentikasi (opsional untuk tamu) → otorisasi kepemilikan → 
 
 File `messages/{id,en}.json` + helper `t()` kecil di `src/lib/i18n.ts`. Semua halaman ada di bawah segmen `app/[lang]/` (`/id/...`, `/en/...`), sesuai panduan i18n resmi Next.js 16. Dengan `cacheComponents`, pola ini membuat halaman tetap bisa di-prerender statis, dan `<html lang>` benar per bahasa.
 
-`src/proxy.ts` mengarahkan URL tanpa prefix ke locale pilihan: cookie `locale`, lalu `Accept-Language`, lalu `id`. Toggle bahasa mengganti prefix URL dan menyimpan cookie.
+`src/proxy.ts` mengarahkan URL tanpa prefix ke locale pilihan: cookie `locale`, lalu `Accept-Language`, lalu `id`.
+
+Toggle bahasa di header (`src/components/language-toggle.tsx`) memanggil Server Action `switchLocale` (`src/features/preferences/actions.ts`):
+
+- Menulis cookie `locale` (1 tahun, `HttpOnly`, `SameSite=Lax`). Bila login, juga `profiles.locale` (kolom yang memang boleh di-update `authenticated`). Gagal menulis profil tidak membatalkan pergantian bahasa.
+- Mengembalikan halaman yang sama dengan prefix lain. Path divalidasi `safeNext`, jadi tidak bisa keluar situs; query ikut dipertahankan.
+- Klien lalu memuat ulang halaman penuh (`location.assign`). `[lang]` adalah root layout, dan navigasi klien antar-locale membuat `<html>` kehilangan atribut `lang`, font, dan tema.
+
+Tema (`src/components/theme-toggle.tsx`): siklus Sistem → Terang → Gelap. Pilihan disimpan di `localStorage` `theme` sebagai preferensi tampilan, bukan data scan. Skrip kecil di awal `<body>` memasang `data-theme` sebelum paint.
 
 ## 5. Data model (Supabase)
 

@@ -13,7 +13,7 @@ X-ray adalah **data kesehatan**. Prinsipnya: simpan sesedikit mungkin, hanya bil
 | IP | Hash SHA-256 + salt di `usage_counters` (kuota) | Tidak dipakai | Tidak dipakai |
 | Log server | Tanpa gambar, tanpa isi chat, tanpa IP mentah | Sama | Sama |
 
-`sessionStorage` hilang saat tab ditutup. Tidak ada `localStorage` untuk data scan.
+`sessionStorage` hilang saat tab ditutup. Tidak ada `localStorage` untuk data scan; satu-satunya isi `localStorage` adalah preferensi tema (`theme`).
 
 Gambar contoh ("Coba contoh") bukan data pengguna: X-ray publik berlisensi CC BY dari Wikimedia Commons dan Mendeley Data, tanpa nama atau identitas pasien yang terlihat. Hasilnya dihitung sekali dan ikut di repo, jadi memilih contoh tidak mengirim apa pun ke Gemini atau API inferensi.
 

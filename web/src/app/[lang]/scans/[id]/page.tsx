@@ -24,7 +24,7 @@ export default function SavedScanPage({
   params: Promise<{ lang: string; id: string }>;
 }) {
   return (
-    <div data-room="lightbox" className="flex flex-1 flex-col bg-bg text-ink">
+    <div data-room="lightbox" className="lights-off flex flex-1 flex-col bg-bg text-ink">
       <Suspense fallback={<ScanSkeleton />}>
         <ScanContent params={params} />
       </Suspense>

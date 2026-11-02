@@ -50,7 +50,7 @@ Referensi yang dipelajari (dibuka di browser saat M2 dan M5 untuk detail):
 
 ## 3. Tokens
 
-CSS variables di `@theme` Tailwind v4. Tema terang/gelap mengikuti sistem dengan toggle manual (`data-theme`). Ruang gelap (`[data-room="lightbox"]`) selalu memakai palet gelap, apa pun temanya.
+CSS variables di `@theme` Tailwind v4. Tema terang/gelap mengikuti sistem dengan toggle manual (`data-theme`, disimpan di `localStorage`, lihat [architecture §4.5](architecture.md#45-i18n)). Ruang gelap (`[data-room="lightbox"]`) selalu memakai palet gelap, apa pun temanya.
 
 ### 3.1 Warna
 
@@ -140,6 +140,8 @@ Basis shadcn/ui (Radix + Lucide), semua di-restyle dengan tokens. Tampilan defau
 | `Disclaimer` | 1 kalimat + tautan Tentang model | inline, footer |
 | `Select` | Dropdown tunggal untuk semua pilihan (`web/src/components/ui/select.tsx`, Radix Select). Daftar selebar pemicu dan dibatasi ruang viewport, jadi tidak melewati layar 360 px. Jangan pakai `<select>` native | closed, open, highlighted, checked |
 | `QuotaNotice` | Sisa kuota / waktu reset / ajakan login | warn, exceeded |
+| `HeroSweep` | Panoramik contoh (`restorations`) + kotak per kelompok + penanda mono bernomor `01`… di gambar, keterangan nama · confidence di bawahnya (bukan callout di atas kotak, agar tidak bertumpuk di 360 px) + atribusi | animating, reduced-motion (state akhir) |
+| `LanguageToggle` / `ThemeToggle` | Label mono di header: kode bahasa tujuan (`EN`/`ID`) dan nama tema aktif. Di < 640 px tautan akun dilipat ke menu | system, light, dark |
 
 ## 6. Layout responsif
 

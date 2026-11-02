@@ -12,8 +12,8 @@ Upload X-ray panoramik gigi, lalu lihat apa yang ditandai AI: 31 jenis temuan de
 | M1 API inferensi (`/v1/analyze`, Grad-CAM P3, Dockerfile HF Space) | Selesai. Deploy Space dilakukan manual ([architecture §3.4](docs/architecture.md#34-deploy)) |
 | M2 Web scan & hasil | Berjalan: upload + validasi Gemini (#9), viewer & daftar temuan (#10), heatmap (#11), gambar contoh (#12). Menunggu review penjelasan 31 kelas oleh pemilik repo |
 | M3 Gemini | Selesai: insight streaming (#13), chat per scan + chat umum `/chat` (#14). Keputusan `GEMINI_FALLBACK_MODEL` masih terbuka ([roadmap](docs/roadmap.md#keputusan-yang-masih-terbuka)) |
-| M4 Akun & riwayat | Berjalan: tabel, RLS, kuota atomik, bucket `scans` (#15), login Google & email (#16), riwayat scan & chat, hapus data (#17) |
-| M5 | Belum dimulai ([roadmap](docs/roadmap.md)) |
+| M4 Akun & riwayat | Selesai: tabel, RLS, kuota atomik, bucket `scans` (#15), login Google & email (#16), riwayat scan & chat, hapus data (#17), import hasil tamu & kuota harian (#18) |
+| M5 Landing, polish, deploy | Berjalan: landing + hero sweep, Privasi, Tentang model, transisi lightbox, toggle bahasa & tema, toggle "Jangan simpan" (#19). Audit & deploy (#20) belum |
 
 Belum ada deploy production.
 

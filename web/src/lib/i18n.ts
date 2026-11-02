@@ -21,6 +21,11 @@ export function resolveLocale(cookie: string | undefined, acceptLanguage: string
   return "id";
 }
 
+/** The same page in another language: swaps the leading `/id` or `/en` segment. */
+export function withLocale(path: string, to: Locale): string {
+  return path.replace(new RegExp(`^/(${locales.join("|")})(?=[/?#]|$)`), `/${to}`);
+}
+
 export function t(locale: Locale, key: MessageKey): string {
   return messages[locale][key];
 }
