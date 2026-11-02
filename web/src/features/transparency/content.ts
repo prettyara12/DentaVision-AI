@@ -34,7 +34,7 @@ export const privacy: Record<Locale, { title: string; lede: string; blocks: Bloc
           "Google Gemini menerima gambar terkompres untuk memeriksa apakah itu X-ray gigi.",
           "Untuk ringkasan dan chat, Google Gemini hanya menerima daftar temuan, ringkasan sebelumnya, dan maksimal 20 pesan terakhir. Gambar tidak ikut dikirim.",
           "Kami memakai Gemini versi gratis. Pada versi ini Google boleh memakai prompt dan respons untuk meningkatkan produknya.",
-          "Hugging Face Spaces menerima gambar terkompres untuk deteksi dan tidak menyimpannya.",
+          "Layanan deteksi kami di Hugging Face Spaces menerima gambar terkompres, memprosesnya di memori, dan tidak menyimpannya.",
           "Supabase menyimpan data akun. Vercel menjalankan situs ini dan menerima request HTTP.",
         ],
       },
@@ -82,7 +82,7 @@ export const privacy: Record<Locale, { title: string; lede: string; blocks: Bloc
           "Google Gemini receives the compressed image to check that it is a dental X-ray.",
           "For the summary and chat, Google Gemini receives only the list of findings, the previous summary, and at most the last 20 messages. The image is not sent.",
           "We use the free tier of Gemini. On this tier Google may use prompts and responses to improve its products.",
-          "Hugging Face Spaces receives the compressed image for detection and does not keep it.",
+          "Our detection service on Hugging Face Spaces receives the compressed image, processes it in memory, and does not keep it.",
           "Supabase stores account data. Vercel hosts this site and receives HTTP requests.",
         ],
       },
@@ -144,7 +144,7 @@ export const aboutModel: Record<
         "Ringkasan dan chat ditulis Google Gemini dari daftar temuan, bukan dari gambar.",
       ],
     },
-    metricsTitle: "Akurasi pada data validasi",
+    metricsTitle: "Metrik evaluasi pada data validasi",
     metricsLede: "Diukur pada checkpoint yang dipakai situs ini. Nilai maksimum 1.",
     metricLabels: {
       precision: {
@@ -195,7 +195,7 @@ export const aboutModel: Record<
         "The summary and chat are written by Google Gemini from the list of findings, not from the image.",
       ],
     },
-    metricsTitle: "Accuracy on validation data",
+    metricsTitle: "Evaluation metrics on validation data",
     metricsLede: "Measured on the checkpoint this site uses. The maximum is 1.",
     metricLabels: {
       precision: { name: "Precision", meaning: "Of all boxes it marks, about 54% are correct." },
