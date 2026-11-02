@@ -1,9 +1,17 @@
-import { saveScanUpload } from "@/features/history/data";
+import { deleteScan, saveScanUpload } from "@/features/history/data";
 import type { ScanEvent } from "@/features/scan/result";
 import { readBody } from "@/lib/body";
 import { isRejected, validateXray } from "@/lib/gemini";
 import { isLocale } from "@/lib/i18n";
 import { analyzeImage } from "@/lib/inference";
+import {
+  checkQuota,
+  consumeQuota,
+  getQuotaLimit,
+  getQuotaSubject,
+  quotaHeaders,
+} from "@/lib/quota";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient, currentUser } from "@/lib/supabase/server";
 
 // Compressed upload limit (docs/architecture.md §4.2); the browser keeps the original ≤ 10 MB.
@@ -43,6 +51,27 @@ export async function POST(request: Request) {
   const user = await currentUser();
   const supabase = user && shouldSave ? await createClient() : null;
 
+  const subjectInfo = getQuotaSubject(user, request);
+  const limit = getQuotaLimit(subjectInfo.role, "scan");
+  const adminClient = createAdminClient();
+  let quotaCheck;
+  try {
+    quotaCheck = await checkQuota(adminClient, subjectInfo.subject, "scan", limit);
+  } catch (error) {
+    console.error("POST /api/scans quota check failed", error);
+    return Response.json({ code: "unavailable" }, { status: 503 });
+  }
+  if (!quotaCheck.ok) {
+    return Response.json(
+      {
+        code: "quota_exceeded",
+        resetInSeconds: quotaCheck.resetInSeconds,
+        role: subjectInfo.role,
+      },
+      { status: 429, headers: quotaHeaders(quotaCheck) },
+    );
+  }
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -59,13 +88,48 @@ export async function POST(request: Request) {
         send({ type: "stage", stage: "analyzing" });
         const outcome = await analyzeImage(new Blob([bytes], { type: mimeType }));
         if (outcome.kind === "result") {
-          if (user && shouldSave && supabase) {
-            const scanId = crypto.randomUUID();
-            await saveScanUpload(supabase, user.id, scanId, bytes, outcome.result);
-            send({ type: "result", result: outcome.result, scanId });
-          } else {
-            send({ type: "result", result: outcome.result });
+          // Only a delivered scan counts (docs/PRD.md §7): rejections, busy/unavailable and a
+          // failed save never do. So save first, then consume; a parallel burst past the
+          // pre-check loses its result (and its just-saved copy) rather than its quota.
+          const saved = user && shouldSave && supabase ? { supabase, userId: user.id } : null;
+          const scanId = saved ? crypto.randomUUID() : undefined;
+          if (saved && scanId)
+            await saveScanUpload(
+              saved.supabase,
+              saved.userId,
+              scanId,
+              bytes,
+              mimeType,
+              outcome.result,
+            );
+          const discard = async () => {
+            if (!saved || !scanId) return;
+            const removed = await deleteScan(saved.supabase, saved.userId, scanId);
+            if (!removed.ok) console.error(`Unbilled scan ${scanId} left saved:`, removed.error);
+          };
+
+          let consumed;
+          try {
+            consumed = await consumeQuota(adminClient, subjectInfo.subject, "scan", limit);
+          } catch (error) {
+            await discard();
+            throw error;
           }
+          if (!consumed.ok) {
+            await discard();
+            send({
+              type: "error",
+              code: "quota_exceeded",
+              resetInSeconds: consumed.resetInSeconds,
+              role: subjectInfo.role,
+            });
+            return;
+          }
+          send(
+            scanId
+              ? { type: "result", result: outcome.result, scanId }
+              : { type: "result", result: outcome.result },
+          );
         }
         // The API's colour pre-filter is the fallback check when Gemini is unavailable.
         else if (outcome.kind === "not_xray") send({ type: "rejected", reason: null });

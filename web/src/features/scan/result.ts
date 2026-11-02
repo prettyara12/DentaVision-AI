@@ -21,14 +21,20 @@ export const analyzeResultSchema = z.object({
 
 export type AnalyzeResult = z.infer<typeof analyzeResultSchema>;
 
-export type ScanErrorCode = "busy" | "loading" | "unavailable" | "too_large" | "unsupported_type";
+export type ScanErrorCode =
+  "busy" | "loading" | "unavailable" | "too_large" | "unsupported_type" | "quota_exceeded";
 
 // One JSON object per line from POST /api/scans, in the order the server reaches each stage.
 export type ScanEvent =
   | { type: "stage"; stage: "validating" | "analyzing" }
   | { type: "rejected"; reason: string | null }
   | { type: "result"; result: AnalyzeResult; scanId?: string }
-  | { type: "error"; code: ScanErrorCode };
+  | {
+      type: "error";
+      code: ScanErrorCode;
+      resetInSeconds?: number;
+      role?: "guest" | "user";
+    };
 
 // Guest results live only in this tab (docs/user-flows.md §2).
 export const SCAN_STORAGE_KEY = "dentavision:scan";

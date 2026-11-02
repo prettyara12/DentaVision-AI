@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { QuotaNotice } from "@/components/quota-notice";
 import { t, type Locale, type MessageKey } from "@/lib/i18n";
 import { Dropzone } from "./dropzone";
 import { analyzeResultSchema, SCAN_STORAGE_KEY, type ScanEvent, type StoredScan } from "./result";
@@ -14,6 +15,7 @@ type Phase =
   | { name: ProgressPhase }
   | { name: "sample" }
   | { name: "rejected"; reason: string | null }
+  | { name: "quota_exceeded"; resetInSeconds: number; role: "guest" | "user" }
   | { name: "error"; message: MessageKey };
 
 const WAKING_AFTER_MS = 3_000;
@@ -97,6 +99,14 @@ export function ScanFlow({ lang }: { lang: Locale }) {
       return setPhase({ name: "error", message: "error.unavailable" });
     }
     if (!response.ok || !response.body) {
+      if (response.status === 429) {
+        const data = await response.json().catch(() => ({}));
+        return setPhase({
+          name: "quota_exceeded",
+          resetInSeconds: Number(data?.resetInSeconds) || 86400,
+          role: data?.role === "user" ? "user" : "guest",
+        });
+      }
       const code = await response
         .json()
         .then((b: { code?: string }) => b.code)
@@ -110,9 +120,16 @@ export function ScanFlow({ lang }: { lang: Locale }) {
         if (event.type === "stage") setPhase({ name: event.stage });
         else if (event.type === "rejected")
           return setPhase({ name: "rejected", reason: event.reason });
-        else if (event.type === "error")
+        else if (event.type === "error") {
+          if (event.code === "quota_exceeded") {
+            return setPhase({
+              name: "quota_exceeded",
+              resetInSeconds: event.resetInSeconds || 86400,
+              role: event.role === "user" ? "user" : "guest",
+            });
+          }
           return setPhase({ name: "error", message: `error.${event.code}` });
-        else {
+        } else {
           if (event.scanId) {
             openedResult.current = true;
             return router.push(`/${lang}/scans/${event.scanId}`);
@@ -162,6 +179,25 @@ export function ScanFlow({ lang }: { lang: Locale }) {
 
   if (phase.name === "idle") {
     return <Dropzone lang={lang} problem={phase.problem} onFile={run} onSample={trySample} />;
+  }
+  if (phase.name === "quota_exceeded") {
+    return (
+      <div className="flex flex-col gap-4 border-t border-rule pt-6">
+        <QuotaNotice
+          lang={lang}
+          role={phase.role}
+          kind="scan"
+          resetInSeconds={phase.resetInSeconds}
+        />
+        <button
+          type="button"
+          onClick={reset}
+          className="self-start min-h-11 rounded-sm border border-rule px-5 text-sm font-medium"
+        >
+          {t(lang, "action.another")}
+        </button>
+      </div>
+    );
   }
   if (phase.name === "rejected" || phase.name === "error") {
     return (

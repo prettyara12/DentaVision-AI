@@ -9,6 +9,28 @@ import type { OperationResult, UserScanSummary, UserChatSummary, ScanDetail } fr
 export type { OperationResult, UserScanSummary, UserChatSummary, ScanDetail };
 
 /**
+ * Undoes a half-saved scan. The row goes first: its chat and messages follow by FK cascade
+ * (chats.scan_id, chat_messages.chat_id), and no row is left pointing at removed files.
+ * Cleanup errors are logged (left-over data must be visible), never thrown over the cause.
+ */
+async function rollbackScan(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  scanId: string,
+  paths: string[],
+  rowInserted: boolean,
+): Promise<void> {
+  if (rowInserted) {
+    const { error } = await supabase.from("scans").delete().eq("id", scanId).eq("user_id", userId);
+    if (error) console.error(`Rollback left scan row ${scanId}:`, error.message);
+  }
+  if (paths.length > 0) {
+    const { error } = await supabase.storage.from("scans").remove(paths);
+    if (error) console.error(`Rollback left Storage objects of scan ${scanId}:`, error.message);
+  }
+}
+
+/**
  * Saves an uploaded scan to Storage and inserts the scan metadata row into database.
  * If any step fails during upload or database insertion, any already uploaded Storage
  * objects are cleaned up (best-effort rollback) to avoid leaving orphan files.
@@ -18,16 +40,19 @@ export async function saveScanUpload(
   userId: string,
   scanId: string,
   imageBytes: Uint8Array | Buffer,
+  contentType: string,
   result: AnalyzeResult,
 ): Promise<void> {
   const uploadedPaths: string[] = [];
+  let scanRowInserted = false;
 
   try {
     const originalPath = `${userId}/${scanId}/original.jpg`;
     const { error: originalUploadError } = await supabase.storage
       .from("scans")
       .upload(originalPath, imageBytes, {
-        contentType: "image/jpeg",
+        // The name is canonical (DB check + Storage policy, architecture §5.2); the type is not.
+        contentType,
         upsert: true,
       });
 
@@ -68,13 +93,121 @@ export async function saveScanUpload(
     if (insertError) {
       throw new Error(`Failed to insert scan record: ${insertError.message}`);
     }
+    scanRowInserted = true;
   } catch (error) {
-    if (uploadedPaths.length > 0) {
-      await supabase.storage
-        .from("scans")
-        .remove(uploadedPaths)
-        .catch(() => {});
+    await rollbackScan(supabase, userId, scanId, uploadedPaths, scanRowInserted);
+    throw error;
+  }
+}
+
+export interface SaveScanImportOptions {
+  imageBytes: Uint8Array | Buffer;
+  contentType: string;
+  result: AnalyzeResult;
+  insight?: {
+    locale: "id" | "en";
+    version: string;
+    data: unknown;
+  };
+  chat?: Array<{ role: "user" | "model"; text: string }>;
+}
+
+/**
+ * Saves a guest scan to Storage and creates the database scan record with source = 'import'.
+ * If the guest had active chats for this scan, persists them to chats & chat_messages.
+ * Storage objects are cleaned up on failure (rollback invariant).
+ */
+export async function saveScanImport(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  scanId: string,
+  options: SaveScanImportOptions,
+): Promise<void> {
+  const { imageBytes, contentType, result, insight, chat } = options;
+  const uploadedPaths: string[] = [];
+  let scanRowInserted = false;
+
+  try {
+    const originalPath = `${userId}/${scanId}/original.jpg`;
+    const { error: originalUploadError } = await supabase.storage
+      .from("scans")
+      .upload(originalPath, imageBytes, {
+        // The name is canonical (DB check + Storage policy, architecture §5.2); the type is not.
+        contentType,
+        upsert: true,
+      });
+
+    if (originalUploadError) {
+      throw new Error(`Failed to upload original scan image: ${originalUploadError.message}`);
     }
+    uploadedPaths.push(originalPath);
+
+    for (const [classId, base64] of Object.entries(result.heatmaps)) {
+      const rawBase64 = base64.replace(/^data:image\/\w+;base64,/, "");
+      const buffer = Buffer.from(rawBase64, "base64");
+      const heatmapPath = `${userId}/${scanId}/heatmap-${classId}.png`;
+      const { error: heatmapUploadError } = await supabase.storage
+        .from("scans")
+        .upload(heatmapPath, buffer, {
+          contentType: "image/png",
+          upsert: true,
+        });
+
+      if (heatmapUploadError) {
+        throw new Error(`Failed to upload heatmap ${classId}: ${heatmapUploadError.message}`);
+      }
+      uploadedPaths.push(heatmapPath);
+    }
+
+    const { error: insertError } = await supabase.from("scans").insert({
+      id: scanId,
+      user_id: userId,
+      image_path: originalPath,
+      image_width: result.image.width,
+      image_height: result.image.height,
+      model_version: result.model_version,
+      detections: result.detections,
+      heatmap_class_ids: Object.keys(result.heatmaps).map(Number),
+      insight:
+        (insight?.data as Database["public"]["Tables"]["scans"]["Insert"]["insight"]) ?? null,
+      insight_locale: insight?.locale ?? null,
+      insight_prompt_version: insight?.version ?? null,
+      source: "import",
+    });
+
+    if (insertError) {
+      throw new Error(`Failed to insert scan record: ${insertError.message}`);
+    }
+    scanRowInserted = true;
+
+    if (chat && chat.length > 0) {
+      const { data: chatRecord, error: chatError } = await supabase
+        .from("chats")
+        .insert({
+          user_id: userId,
+          scan_id: scanId,
+          title: "Chat Scan",
+        })
+        .select("id")
+        .single();
+
+      if (chatError || !chatRecord) {
+        throw new Error(`Failed to insert imported chat: ${chatError?.message ?? "unknown error"}`);
+      }
+
+      const messagesToInsert = chat.map((msg) => ({
+        chat_id: chatRecord.id,
+        role: msg.role,
+        content: msg.text,
+      }));
+
+      const { error: msgError } = await supabase.from("chat_messages").insert(messagesToInsert);
+      if (msgError) {
+        throw new Error(`Failed to insert imported chat messages: ${msgError.message}`);
+      }
+    }
+  } catch (error) {
+    await rollbackScan(supabase, userId, scanId, uploadedPaths, scanRowInserted);
     throw error;
   }
 }

@@ -40,6 +40,10 @@ export function useChat(
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState<ChatStatus>("idle");
   const [activeChatId, setActiveChatId] = useState<string | undefined>(options?.chatId);
+  const [quotaExceeded, setQuotaExceeded] = useState<{
+    resetInSeconds: number;
+    role: "guest" | "user";
+  } | null>(null);
   const controller = useRef<AbortController | null>(null);
 
   // Hiding or leaving the page stops the answer; the question stays and can be asked again.
@@ -73,7 +77,16 @@ export function useChat(
           }),
           signal: current.signal,
         });
-        if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
+        if (!response.ok || !response.body) {
+          if (response.status === 429) {
+            const data = await response.json().catch(() => ({}));
+            setQuotaExceeded({
+              resetInSeconds: Number(data?.resetInSeconds) || 86400,
+              role: data?.role === "user" ? "user" : "guest",
+            });
+          }
+          throw new Error(`HTTP ${response.status}`);
+        }
         for await (const event of readLines<ChatEvent>(response.body)) {
           if (event.type === "delta") {
             answer += event.text;
@@ -106,6 +119,7 @@ export function useChat(
     messages,
     draft,
     status,
+    quotaExceeded,
     send: (text: string) => ask([...messages, { role: "user", text: text.trim() }]),
     /** Asks the last unanswered question again (after an error or an interrupted answer). */
     retry: () => ask(messages),

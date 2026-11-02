@@ -10,6 +10,7 @@ import {
   getScanDetail,
   getUserChats,
   getUserScans,
+  saveScanImport,
   saveScanUpload,
 } from "./data";
 
@@ -33,7 +34,7 @@ describe("History Data Operations", () => {
   };
 
   describe("saveScanUpload", () => {
-    it("uploads original image, heatmaps, and inserts scan into DB", async () => {
+    it("uploads a PNG under the canonical name with its real type, heatmaps, and the row", async () => {
       const uploadMock = vi.fn().mockResolvedValue({ data: { path: "ok" }, error: null });
       const insertMock = vi.fn().mockResolvedValue({ data: null, error: null });
 
@@ -50,7 +51,7 @@ describe("History Data Operations", () => {
 
       const imageBytes = new Uint8Array([1, 2, 3]);
 
-      await saveScanUpload(supabaseMock, userId, scanId, imageBytes, sampleResult);
+      await saveScanUpload(supabaseMock, userId, scanId, imageBytes, "image/png", sampleResult);
 
       expect(supabaseMock.storage.from).toHaveBeenCalledWith("scans");
 
@@ -58,7 +59,7 @@ describe("History Data Operations", () => {
       expect(uploadMock).toHaveBeenCalledWith(
         `${userId}/${scanId}/original.jpg`,
         imageBytes,
-        expect.objectContaining({ contentType: "image/jpeg", upsert: true }),
+        expect.objectContaining({ contentType: "image/png", upsert: true }),
       );
 
       // Verify heatmap upload
@@ -98,7 +99,14 @@ describe("History Data Operations", () => {
       } as unknown as SupabaseClient<Database>;
 
       await expect(
-        saveScanUpload(supabaseMock, userId, scanId, new Uint8Array([1]), sampleResult),
+        saveScanUpload(
+          supabaseMock,
+          userId,
+          scanId,
+          new Uint8Array([1]),
+          "image/jpeg",
+          sampleResult,
+        ),
       ).rejects.toThrow(/Failed to upload original scan image/);
 
       expect(insertMock).not.toHaveBeenCalled();
@@ -119,7 +127,14 @@ describe("History Data Operations", () => {
       } as unknown as SupabaseClient<Database>;
 
       await expect(
-        saveScanUpload(supabaseMock, userId, scanId, new Uint8Array([1]), sampleResult),
+        saveScanUpload(
+          supabaseMock,
+          userId,
+          scanId,
+          new Uint8Array([1]),
+          "image/jpeg",
+          sampleResult,
+        ),
       ).rejects.toThrow(/Failed to insert scan record/);
 
       expect(removeMock).toHaveBeenCalledWith([
@@ -152,11 +167,185 @@ describe("History Data Operations", () => {
       } as unknown as SupabaseClient<Database>;
 
       await expect(
-        saveScanUpload(supabaseMock, userId, scanId, new Uint8Array([1]), sampleResult),
+        saveScanUpload(
+          supabaseMock,
+          userId,
+          scanId,
+          new Uint8Array([1]),
+          "image/jpeg",
+          sampleResult,
+        ),
       ).rejects.toThrow(/Failed to upload heatmap 0/);
 
       // Should have cleaned up the original image
       expect(removeMock).toHaveBeenCalledWith([`${userId}/${scanId}/original.jpg`]);
+    });
+  });
+
+  describe("saveScanImport", () => {
+    it("successfully uploads images and creates scan with source: import, insight, and chat", async () => {
+      const uploadMock = vi.fn().mockResolvedValue({ data: { path: "ok" }, error: null });
+      const insertScanMock = vi.fn().mockResolvedValue({ error: null });
+      const insertChatMock = vi.fn().mockReturnValue({
+        select: () => ({
+          single: vi.fn().mockResolvedValue({ data: { id: "chat-imported-1" }, error: null }),
+        }),
+      });
+      const insertMsgMock = vi.fn().mockResolvedValue({ data: null, error: null });
+
+      const supabaseMock = {
+        storage: {
+          from: vi.fn(() => ({ upload: uploadMock })),
+        },
+        from: vi.fn((table: string) => {
+          if (table === "scans") return { insert: insertScanMock };
+          if (table === "chats") return { insert: insertChatMock };
+          if (table === "chat_messages") return { insert: insertMsgMock };
+          return {};
+        }),
+      } as unknown as SupabaseClient<Database>;
+
+      const imageBytes = Buffer.from([10, 20, 30]);
+      const sampleInsight = {
+        locale: "id" as const,
+        version: "v1",
+        data: {
+          summary: "Ringkasan temuan.",
+          findings: [],
+          questions_for_dentist: ["Pertanyaan 1"],
+        },
+      };
+      const sampleChat = [
+        { role: "user" as const, text: "Halo AI" },
+        { role: "model" as const, text: "Halo, ada yang bisa dibantu?" },
+      ];
+
+      await saveScanImport(supabaseMock, userId, scanId, {
+        imageBytes,
+        contentType: "image/jpeg",
+        result: sampleResult,
+        insight: sampleInsight,
+        chat: sampleChat,
+      });
+
+      expect(uploadMock).toHaveBeenCalledWith(
+        `${userId}/${scanId}/original.jpg`,
+        imageBytes,
+        expect.objectContaining({ contentType: "image/jpeg", upsert: true }),
+      );
+
+      expect(insertScanMock).toHaveBeenCalledWith({
+        id: scanId,
+        user_id: userId,
+        image_path: `${userId}/${scanId}/original.jpg`,
+        image_width: 1024,
+        image_height: 512,
+        model_version: "yolov8m-dentavision-v1.0",
+        detections: sampleResult.detections,
+        heatmap_class_ids: [0],
+        insight: sampleInsight.data,
+        insight_locale: "id",
+        insight_prompt_version: "v1",
+        source: "import",
+      });
+
+      expect(insertChatMock).toHaveBeenCalledWith({
+        user_id: userId,
+        scan_id: scanId,
+        title: "Chat Scan",
+      });
+
+      expect(insertMsgMock).toHaveBeenCalledWith([
+        { chat_id: "chat-imported-1", role: "user", content: "Halo AI" },
+        { chat_id: "chat-imported-1", role: "model", content: "Halo, ada yang bisa dibantu?" },
+      ]);
+    });
+
+    it("cleans up storage objects if scan database insert fails", async () => {
+      const uploadMock = vi.fn().mockResolvedValue({ data: { path: "ok" }, error: null });
+      const removeMock = vi.fn().mockResolvedValue({ data: [], error: null });
+      const insertScanMock = vi.fn().mockResolvedValue({
+        error: new Error("DB scan insert error"),
+      });
+
+      const supabaseMock = {
+        storage: {
+          from: vi.fn(() => ({ upload: uploadMock, remove: removeMock })),
+        },
+        from: vi.fn(() => ({ insert: insertScanMock })),
+      } as unknown as SupabaseClient<Database>;
+
+      await expect(
+        saveScanImport(supabaseMock, userId, scanId, {
+          imageBytes: Buffer.from([1]),
+          contentType: "image/jpeg",
+          result: sampleResult,
+        }),
+      ).rejects.toThrow(/Failed to insert scan record/);
+
+      expect(removeMock).toHaveBeenCalledWith([
+        `${userId}/${scanId}/original.jpg`,
+        `${userId}/${scanId}/heatmap-0.png`,
+      ]);
+    });
+
+    function failingMessagesMock(cleanupError: Error | null) {
+      const calls: string[] = [];
+      const deleteEq2 = vi.fn(async () => {
+        calls.push("delete scan row");
+        return { error: cleanupError };
+      });
+      const removeMock = vi.fn(async () => {
+        calls.push("remove storage");
+        return { data: [], error: cleanupError };
+      });
+      const supabase = {
+        storage: {
+          from: vi.fn(() => ({
+            upload: vi.fn().mockResolvedValue({ data: { path: "ok" }, error: null }),
+            remove: removeMock,
+          })),
+        },
+        from: vi.fn((table: string) => {
+          if (table === "scans")
+            return {
+              insert: vi.fn().mockResolvedValue({ error: null }),
+              delete: () => ({ eq: () => ({ eq: deleteEq2 }) }),
+            };
+          if (table === "chats")
+            return {
+              insert: () => ({
+                select: () => ({
+                  single: vi.fn().mockResolvedValue({ data: { id: "chat-1" }, error: null }),
+                }),
+              }),
+            };
+          return { insert: vi.fn().mockResolvedValue({ error: new Error("messages down") }) };
+        }),
+      } as unknown as SupabaseClient<Database>;
+      return { supabase, calls };
+    }
+    const importWithChat = (supabase: SupabaseClient<Database>) =>
+      saveScanImport(supabase, userId, scanId, {
+        imageBytes: Buffer.from([1]),
+        contentType: "image/jpeg",
+        result: sampleResult,
+        chat: [{ role: "user", text: "Halo" }],
+      });
+
+    it("rolls back the scan row (chat cascades) before Storage when messages fail", async () => {
+      const { supabase, calls } = failingMessagesMock(null);
+      await expect(importWithChat(supabase)).rejects.toThrow(/chat messages: messages down/);
+      expect(calls).toEqual(["delete scan row", "remove storage"]);
+    });
+
+    it("logs a failed cleanup and still throws the original error", async () => {
+      const log = vi.spyOn(console, "error").mockImplementation(() => {});
+      const { supabase, calls } = failingMessagesMock(new Error("cleanup down"));
+      await expect(importWithChat(supabase)).rejects.toThrow(/chat messages: messages down/);
+      expect(calls).toEqual(["delete scan row", "remove storage"]);
+      expect(log).toHaveBeenCalledTimes(2);
+      log.mockRestore();
     });
   });
 

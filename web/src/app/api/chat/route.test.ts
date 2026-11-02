@@ -5,11 +5,29 @@ import { readLines } from "@/features/scan/upload";
 const streamChat = vi.hoisted(() => vi.fn());
 const currentUser = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 const createClient = vi.hoisted(() => vi.fn());
+const consumeQuota = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ ok: true, limit: 20, resetInSeconds: 3600 }),
+);
+const getQuotaSubject = vi.hoisted(() =>
+  vi.fn().mockReturnValue({ subject: "ip:test", role: "guest" }),
+);
+const getQuotaLimit = vi.hoisted(() => vi.fn().mockReturnValue(20));
+const quotaHeaders = vi.hoisted(() => vi.fn().mockReturnValue({ "RateLimit-Limit": "20" }));
+const createAdminClient = vi.hoisted(() => vi.fn().mockReturnValue({}));
 
 vi.mock("@/lib/gemini", () => ({ streamChat }));
 vi.mock("@/lib/supabase/server", () => ({
   currentUser,
   createClient,
+}));
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient,
+}));
+vi.mock("@/lib/quota", () => ({
+  consumeQuota,
+  getQuotaSubject,
+  getQuotaLimit,
+  quotaHeaders,
 }));
 
 const { POST } = await import("./route");
@@ -46,6 +64,7 @@ beforeEach(() => {
   streamChat.mockReset();
   currentUser.mockReset().mockResolvedValue(null);
   createClient.mockReset();
+  consumeQuota.mockReset().mockResolvedValue({ ok: true, limit: 20, resetInSeconds: 3600 });
 });
 
 describe("POST /api/chat", () => {
@@ -256,6 +275,7 @@ describe("POST /api/chat", () => {
 
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({ code: "not_found" });
+    expect(consumeQuota).not.toHaveBeenCalled();
     expect(streamChat).not.toHaveBeenCalled();
   });
 
@@ -339,6 +359,7 @@ describe("POST /api/chat", () => {
 
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({ code: "not_found" });
+    expect(consumeQuota).not.toHaveBeenCalled();
     expect(streamChat).not.toHaveBeenCalled();
   });
 
@@ -386,5 +407,77 @@ describe("POST /api/chat", () => {
     // Should have deltas, then terminate with error event instead of done
     expect(receivedEvents.some((e) => e.type === "delta")).toBe(true);
     expect(receivedEvents.at(-1)).toEqual({ type: "error" });
+  });
+
+  it("returns 429 when consumeQuota reports quota exceeded", async () => {
+    consumeQuota.mockResolvedValueOnce({
+      ok: false,
+      limit: 20,
+      resetInSeconds: 1200,
+    });
+
+    const response = await post({
+      locale: "id",
+      messages: [question],
+    });
+
+    expect(response.status).toBe(429);
+    expect(await response.json()).toEqual({
+      code: "quota_exceeded",
+      resetInSeconds: 1200,
+      role: "guest",
+    });
+    expect(streamChat).not.toHaveBeenCalled();
+  });
+
+  it("fails closed with 503 when the quota RPC errors", async () => {
+    consumeQuota.mockRejectedValueOnce(new Error("rpc down"));
+
+    const response = await post({ locale: "id", messages: [question] });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ code: "unavailable" });
+    expect(streamChat).not.toHaveBeenCalled();
+  });
+  describe("new chats are created only after the quota is consumed", () => {
+    const scanId = "660e8400-e29b-41d4-a716-446655440000";
+    function loggedIn() {
+      currentUser.mockResolvedValue({ id: "user-123", email: "user@test.com" });
+      const insertChat = vi.fn();
+      const found = (data: unknown) =>
+        vi.fn(() => ({
+          eq: () => ({
+            eq: () => ({ maybeSingle: vi.fn().mockResolvedValue({ data, error: null }) }),
+          }),
+        }));
+      createClient.mockResolvedValue({
+        from: vi.fn((table: string) => {
+          if (table === "scans") return { select: found({ id: scanId }) };
+          if (table === "chats") return { select: found(null), insert: insertChat };
+          return { insert: vi.fn() };
+        }),
+      });
+      return insertChat;
+    }
+
+    it.each([
+      ["general chat", {}],
+      ["new scan chat", { scanId }],
+    ])("does not create a %s on 429", async (_, extra) => {
+      const insertChat = loggedIn();
+      consumeQuota.mockResolvedValueOnce({ ok: false, limit: 100, resetInSeconds: 60 });
+
+      const response = await post({ locale: "id", messages: [question], ...extra });
+      expect(response.status).toBe(429);
+      expect(insertChat).not.toHaveBeenCalled();
+    });
+
+    it("does not create a chat when the quota RPC errors", async () => {
+      const insertChat = loggedIn();
+      consumeQuota.mockRejectedValueOnce(new Error("rpc down"));
+
+      const response = await post({ locale: "id", messages: [question] });
+      expect(response.status).toBe(503);
+      expect(insertChat).not.toHaveBeenCalled();
+    });
   });
 });

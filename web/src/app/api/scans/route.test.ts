@@ -7,6 +7,19 @@ const analyzeImage = vi.hoisted(() => vi.fn());
 const currentUser = vi.hoisted(() => vi.fn());
 const createClient = vi.hoisted(() => vi.fn());
 const saveScanUpload = vi.hoisted(() => vi.fn());
+const deleteScan = vi.hoisted(() => vi.fn());
+const checkQuota = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ ok: true, limit: 5, remaining: 5, resetInSeconds: 3600 }),
+);
+const consumeQuota = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ ok: true, limit: 5, resetInSeconds: 3600 }),
+);
+const getQuotaSubject = vi.hoisted(() =>
+  vi.fn().mockReturnValue({ subject: "ip:test", role: "guest" }),
+);
+const getQuotaLimit = vi.hoisted(() => vi.fn().mockReturnValue(5));
+const quotaHeaders = vi.hoisted(() => vi.fn().mockReturnValue({ "RateLimit-Limit": "5" }));
+const createAdminClient = vi.hoisted(() => vi.fn().mockReturnValue({}));
 
 vi.mock("@/lib/gemini", async () => ({
   validateXray,
@@ -18,13 +31,25 @@ vi.mock("@/lib/supabase/server", () => ({
   currentUser,
   createClient,
 }));
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient,
+}));
+vi.mock("@/lib/quota", () => ({
+  checkQuota,
+  consumeQuota,
+  getQuotaSubject,
+  getQuotaLimit,
+  quotaHeaders,
+}));
 vi.mock("@/features/history/data", () => ({
   saveScanUpload,
+  deleteScan,
 }));
 
 const { POST } = await import("./route");
 
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0]);
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0]);
 const RESULT = {
   model_version: "yolov8m-resnet50@60bfdce6",
   image: { width: 2048, height: 1024 },
@@ -68,6 +93,11 @@ beforeEach(() => {
   currentUser.mockReset().mockResolvedValue(null);
   createClient.mockReset();
   saveScanUpload.mockReset();
+  deleteScan.mockReset().mockResolvedValue({ ok: true });
+  checkQuota
+    .mockReset()
+    .mockResolvedValue({ ok: true, limit: 5, remaining: 5, resetInSeconds: 3600 });
+  consumeQuota.mockReset().mockResolvedValue({ ok: true, limit: 5, resetInSeconds: 3600 });
 });
 
 describe("POST /api/scans", () => {
@@ -208,6 +238,7 @@ describe("POST /api/scans", () => {
       "user-123",
       expect.any(String),
       expect.any(Uint8Array),
+      "image/jpeg",
       RESULT,
     );
     const lastEvent = resultEvents.at(-1);
@@ -216,6 +247,17 @@ describe("POST /api/scans", () => {
       result: RESULT,
       scanId: expect.any(String),
     });
+  });
+
+  it("saves a PNG upload with its sniffed type, not JPEG", async () => {
+    currentUser.mockResolvedValue({ id: "user-123", email: "user@test.com" });
+    createClient.mockResolvedValue({ client: "supabase" });
+    saveScanUpload.mockResolvedValue(undefined);
+    validateXray.mockResolvedValue(null);
+    analyzeImage.mockResolvedValue({ kind: "result", result: RESULT });
+
+    await events(await POST(await upload(PNG)));
+    expect(saveScanUpload.mock.calls[0]?.[4]).toBe("image/png");
   });
 
   it("does not save scan and emits no scanId when user is logged in but save is 'false'", async () => {
@@ -235,6 +277,135 @@ describe("POST /api/scans", () => {
     expect(lastEvent).toEqual({
       type: "result",
       result: RESULT,
+    });
+  });
+
+  it("returns 429 when initial checkQuota reports quota exceeded", async () => {
+    checkQuota.mockResolvedValueOnce({
+      ok: false,
+      count: 5,
+      limit: 5,
+      remaining: 0,
+      resetInSeconds: 1800,
+    });
+
+    const response = await POST(await upload(JPEG));
+    expect(response.status).toBe(429);
+    expect(await response.json()).toEqual({
+      code: "quota_exceeded",
+      resetInSeconds: 1800,
+      role: "guest",
+    });
+    expect(validateXray).not.toHaveBeenCalled();
+    expect(consumeQuota).not.toHaveBeenCalled();
+  });
+
+  it("does not consume quota when validation rejects the image", async () => {
+    validateXray.mockResolvedValue({
+      is_dental_panoramic: false,
+      confidence: 0.9,
+      reason: "Bukan X-ray gigi",
+    });
+
+    const response = await POST(await upload(JPEG));
+    const resultEvents = await events(response);
+    expect(resultEvents).toEqual([
+      { type: "stage", stage: "validating" },
+      { type: "rejected", reason: "Bukan X-ray gigi" },
+    ]);
+    expect(consumeQuota).not.toHaveBeenCalled();
+  });
+
+  it("withholds the result when the atomic consume finds the quota used up", async () => {
+    validateXray.mockResolvedValue(null);
+    analyzeImage.mockResolvedValue({ kind: "result", result: RESULT });
+    consumeQuota.mockResolvedValueOnce({ ok: false, limit: 5, resetInSeconds: 1800 });
+
+    const response = await POST(await upload(JPEG));
+    const resultEvents = await events(response);
+    expect(resultEvents).toEqual([
+      { type: "stage", stage: "validating" },
+      { type: "stage", stage: "analyzing" },
+      {
+        type: "error",
+        code: "quota_exceeded",
+        resetInSeconds: 1800,
+        role: "guest",
+      },
+    ]);
+  });
+
+  it.each([
+    [{ kind: "not_xray" }, { type: "rejected", reason: null }],
+    [
+      { kind: "error", code: "busy" },
+      { type: "error", code: "busy" },
+    ],
+  ])("does not consume quota when inference gives no scan (%o)", async (outcome, last) => {
+    validateXray.mockResolvedValue(null);
+    analyzeImage.mockResolvedValueOnce(outcome);
+
+    const resultEvents = await events(await POST(await upload(JPEG)));
+    expect(resultEvents.at(-1)).toEqual(last);
+    expect(consumeQuota).not.toHaveBeenCalled();
+  });
+
+  it("fails closed with 503 when the quota counter cannot be read", async () => {
+    checkQuota.mockRejectedValueOnce(new Error("db down"));
+
+    const response = await POST(await upload(JPEG));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ code: "unavailable" });
+    expect(validateXray).not.toHaveBeenCalled();
+  });
+
+  it("reports unavailable, not quota_exceeded, when consuming quota errors", async () => {
+    validateXray.mockResolvedValue(null);
+    analyzeImage.mockResolvedValue({ kind: "result", result: RESULT });
+    consumeQuota.mockRejectedValueOnce(new Error("rpc down"));
+
+    const resultEvents = await events(await POST(await upload(JPEG)));
+    expect(consumeQuota).toHaveBeenCalledTimes(1);
+    expect(resultEvents.at(-1)).toEqual({ type: "error", code: "unavailable" });
+  });
+  describe("logged-in save and quota order", () => {
+    async function loggedInScan() {
+      currentUser.mockResolvedValue({ id: "user-123", email: "user@test.com" });
+      createClient.mockResolvedValue({ client: "supabase" });
+      validateXray.mockResolvedValue(null);
+      analyzeImage.mockResolvedValue({ kind: "result", result: RESULT });
+      return events(await POST(await upload(JPEG)));
+    }
+    const savedId = () => saveScanUpload.mock.calls[0]?.[2];
+
+    it("saves before consuming, so a failed save costs no quota", async () => {
+      saveScanUpload.mockRejectedValueOnce(new Error("storage down"));
+      const resultEvents = await loggedInScan();
+      expect(resultEvents.at(-1)).toEqual({ type: "error", code: "unavailable" });
+      expect(consumeQuota).not.toHaveBeenCalled();
+    });
+
+    it("discards the just-saved scan when the quota is used up", async () => {
+      saveScanUpload.mockResolvedValueOnce(undefined);
+      consumeQuota.mockResolvedValueOnce({ ok: false, limit: 20, resetInSeconds: 600 });
+      const resultEvents = await loggedInScan();
+      expect(deleteScan).toHaveBeenCalledWith({ client: "supabase" }, "user-123", savedId());
+      expect(resultEvents.at(-1)).toMatchObject({ type: "error", code: "quota_exceeded" });
+    });
+
+    it("discards the just-saved scan when the quota RPC errors", async () => {
+      saveScanUpload.mockResolvedValueOnce(undefined);
+      consumeQuota.mockRejectedValueOnce(new Error("rpc down"));
+      const resultEvents = await loggedInScan();
+      expect(deleteScan).toHaveBeenCalledWith({ client: "supabase" }, "user-123", savedId());
+      expect(resultEvents.at(-1)).toEqual({ type: "error", code: "unavailable" });
+    });
+
+    it("keeps the saved scan once the quota is consumed", async () => {
+      saveScanUpload.mockResolvedValueOnce(undefined);
+      const resultEvents = await loggedInScan();
+      expect(deleteScan).not.toHaveBeenCalled();
+      expect(resultEvents.at(-1)).toEqual({ type: "result", result: RESULT, scanId: savedId() });
     });
   });
 });

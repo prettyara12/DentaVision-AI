@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { QuotaNotice } from "@/components/quota-notice";
 import { t, type Locale } from "@/lib/i18n";
 import { MAX_USER_CHARS } from "./message";
 import type { useChat } from "./use-chat";
@@ -77,7 +78,15 @@ export function ChatPanel({ lang, chat, suggestions, source }: Props) {
           {t(lang, "chat.typing")}
         </p>
       )}
-      {unanswered && (
+      {chat.quotaExceeded && (
+        <QuotaNotice
+          lang={lang}
+          role={chat.quotaExceeded.role}
+          kind="chat"
+          resetInSeconds={chat.quotaExceeded.resetInSeconds}
+        />
+      )}
+      {unanswered && !chat.quotaExceeded && (
         <div role="alert" className="flex flex-wrap items-center gap-3">
           <p className="text-sm">
             {t(lang, status === "error" ? "chat.unavailable" : "chat.interrupted")}
@@ -91,33 +100,35 @@ export function ChatPanel({ lang, chat, suggestions, source }: Props) {
           </button>
         </div>
       )}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          send(text);
-        }}
-        className="flex items-end gap-2"
-      >
-        <textarea
-          id="chat-input"
-          ref={input}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={onKey}
-          maxLength={MAX_USER_CHARS}
-          rows={2}
-          aria-label={t(lang, "chat.placeholder")}
-          placeholder={t(lang, "chat.placeholder")}
-          className="min-h-11 flex-1 resize-none rounded-sm border border-rule bg-transparent px-3 py-2 text-base placeholder:text-ink-2 focus-visible:border-ink-2"
-        />
-        <button
-          type="submit"
-          disabled={streaming || !text.trim()}
-          className="min-h-11 rounded-sm bg-accent px-4 text-sm font-medium text-accent-ink disabled:opacity-50"
+      {!chat.quotaExceeded && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            send(text);
+          }}
+          className="flex items-end gap-2"
         >
-          {t(lang, "chat.send")}
-        </button>
-      </form>
+          <textarea
+            id="chat-input"
+            ref={input}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={onKey}
+            maxLength={MAX_USER_CHARS}
+            rows={2}
+            aria-label={t(lang, "chat.placeholder")}
+            placeholder={t(lang, "chat.placeholder")}
+            className="min-h-11 flex-1 resize-none rounded-sm border border-rule bg-transparent px-3 py-2 text-base placeholder:text-ink-2 focus-visible:border-ink-2"
+          />
+          <button
+            type="submit"
+            disabled={streaming || !text.trim()}
+            className="min-h-11 rounded-sm bg-accent px-4 text-sm font-medium text-accent-ink disabled:opacity-50"
+          >
+            {t(lang, "chat.send")}
+          </button>
+        </form>
+      )}
       <div className="flex flex-col gap-1 text-xs text-ink-2">
         {source && <p>{t(lang, "chat.source")}</p>}
         <p>{t(lang, "disclaimer.short")}</p>
