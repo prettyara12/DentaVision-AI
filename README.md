@@ -13,9 +13,9 @@ Upload X-ray panoramik gigi, lalu lihat apa yang ditandai AI: 31 jenis temuan de
 | M2 Web scan & hasil | Berjalan: upload + validasi Gemini (#9), viewer & daftar temuan (#10), heatmap (#11), gambar contoh (#12). Menunggu review penjelasan 31 kelas oleh pemilik repo |
 | M3 Gemini | Selesai: insight streaming (#13), chat per scan + chat umum `/chat` (#14). Keputusan `GEMINI_FALLBACK_MODEL` masih terbuka ([roadmap](docs/roadmap.md#keputusan-yang-masih-terbuka)) |
 | M4 Akun & riwayat | Selesai: tabel, RLS, kuota atomik, bucket `scans` (#15), login Google & email (#16), riwayat scan & chat, hapus data (#17), import hasil tamu & kuota harian (#18) |
-| M5 Landing, polish, deploy | Berjalan: landing + hero sweep, Privasi, Tentang model, transisi lightbox, toggle bahasa & tema, toggle "Jangan simpan" (#19). Audit & deploy (#20) belum |
+| M5 Landing, polish, deploy | Berjalan: landing + hero sweep, Privasi, Tentang model, transisi lightbox, toggle bahasa & tema, toggle "Jangan simpan" (#19), audit kontras/reduced-motion/performa (#20). Deploy production belum |
 
-Belum ada deploy production.
+Belum ada deploy production. Langkahnya ada di [Deploy production](#deploy-production).
 
 ## Cara kerja
 
@@ -174,16 +174,54 @@ Database (butuh Docker + Supabase CLI): `supabase start` (menerapkan semua migra
 | "Server analisis tidak merespons" | Secret API dan web berbeda (API menjawab 401). Jalankan ulang Terminal 1 dengan perintah di atas |
 | `EADDRINUSE` port 3000/7860 | Server lama masih jalan. Tutup terminal lamanya, atau hentikan proses `node`/`python` yang memakai port itu |
 
-## Deploy API ke HF Space
+## Deploy production
 
-Space tipe Docker dari folder `api/` (`api/Dockerfile`, port 7860). Isi secret `API_SECRET` di Settings Space, lalu upload dari folder `api`:
+Dijalankan pemilik repo, berurutan. Agent tidak menjalankan langkah ini karena menyentuh layanan hosted.
+
+### 1. API di HF Space
+
+Space tipe Docker dari folder `api/` (`api/Dockerfile`, port 7860). Isi secret `API_SECRET` di Settings Space, lalu upload dari folder `api` setelah `development` di-merge ke `main`:
 
 ```powershell
 hf auth login
 hf upload <owner>/<space> . . --repo-type space --include "Dockerfile" --include ".dockerignore" --include "README.md" --include "requirements.txt" --include "app/*.py"
 ```
 
-Setelah itu ganti `INFERENCE_API_URL` di `web/.env.local` ke `https://<owner>-<space>.hf.space` dan `INFERENCE_API_SECRET` ke secret Space. Detail: [docs/architecture.md §3.4](docs/architecture.md#34-deploy).
+Tunggu build, lalu pastikan `https://<owner>-<space>.hf.space/health` menjawab `"status":"ready"`. Detail: [docs/architecture.md §3.4](docs/architecture.md#34-deploy).
+
+### 2. Database Supabase
+
+Terapkan semua migrasi di `supabase/migrations/` ke project hosted, lalu cek di dashboard bahwa RLS aktif di semua tabel dan bucket `scans` privat.
+
+### 3. Web di Vercel (Hobby)
+
+1. **Add New → Project**, impor `prettyara12/DentaVision-AI`. *Root Directory*: `web`. Framework terdeteksi Next.js.
+2. **Settings → Environment** isi semua variabel dari [docs/architecture.md §6](docs/architecture.md#6-environment) untuk *Production*. `INFERENCE_API_URL` = URL Space, `INFERENCE_API_SECRET` = `API_SECRET` Space. Biarkan `GEMINI_FALLBACK_MODEL` tidak diisi bila tidak dipakai.
+3. **Settings → Git**: *Production Branch* `main`.
+4. Deploy, lalu catat domain production (misalnya `https://<project>.vercel.app`).
+
+### 4. Auth Supabase untuk domain production
+
+- **Authentication → URL Configuration**: *Site URL* = domain production. Tambahkan `https://<domain>/auth/callback` ke *Redirect URLs* (biarkan URL localhost untuk dev).
+- Google OAuth tidak perlu diubah: redirect URI-nya tetap `https://<project-ref>.supabase.co/auth/v1/callback`.
+
+### 5. Cek setelah deploy
+
+- `https://<domain>/api/health` menjawab sehat, dan landing `/id` serta `/en` terbuka.
+- Coba gambar contoh di `/id/scan` sampai halaman hasil. Panggilan pertama bisa lama bila Space sedang tidur.
+- Daftar dan login (email, Google), simpan satu scan, buka di Riwayat, lalu hapus.
+- [PageSpeed Insights](https://pagespeed.web.dev/) mode mobile untuk landing: target Performance ≥ 85, Accessibility ≥ 95 ([PRD §10](docs/PRD.md#10-metrik-keberhasilan)).
+
+### Batas free tier
+
+Diverifikasi ke dokumentasi resmi pada 2026-11-02. Angka bisa berubah; cek ulang tautan sumber.
+
+| Layanan | Batas yang relevan | Sumber |
+|---|---|---|
+| Vercel Hobby | Hanya untuk penggunaan pribadi non-komersial. Body request/response function maks 4,5 MB. Durasi function maks 300 dtk. 5.000 transformasi gambar per bulan | [Hobby](https://vercel.com/docs/plans/hobby), [Functions limits](https://vercel.com/docs/functions/limitations) |
+| HF Spaces CPU basic | 2 vCPU, 16 GB RAM, disk 50 GB tidak persisten. Tidur bila tidak dipakai beberapa waktu (durasi tidak disebut). Membuat Space Docker **baru** kini butuh paket berbayar; Space proyek ini sudah ada | [Spaces overview](https://huggingface.co/docs/hub/spaces-overview) |
+| Supabase Free | Database 500 MB, Storage 1 GB. Project di-pause setelah 1 minggu tanpa aktivitas | [Billing](https://supabase.com/docs/guides/platform/billing-on-supabase), [Project pausing](https://supabase.com/docs/guides/platform/free-project-pausing) |
+| Gemini API free tier | Rate limit per model. Input dan output layanan gratis dipakai Google untuk meningkatkan produk dan bisa dibaca peninjau manusia | [Gemini API terms](https://ai.google.dev/gemini-api/terms) |
 
 ## Struktur repo
 

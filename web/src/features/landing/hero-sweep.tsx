@@ -27,7 +27,8 @@ export function HeroSweep({ lang }: { lang: Locale }) {
           alt={t(lang, "home.hero.alt")}
           width={width}
           height={height}
-          priority
+          fetchPriority="high"
+          loading="eager"
           sizes="(min-width: 1024px) 58vw, 100vw"
           className="block h-auto w-full"
         />

@@ -62,14 +62,14 @@ CSS variables di `@theme` Tailwind v4. Tema terang/gelap mengikuti sistem dengan
 | `--ink` | `#0D1214` | `#E6EBEA` | Teks utama |
 | `--ink-2` | `#4C5558` | `#8E9A9B` | Teks sekunder, label mono |
 | `--rule` | `#CFD4CC` | `#263033` | Hairline, border |
-| `--accent` | `#0B7A57` | `#7DF0C2` | CTA, fokus, sweep scan. Hemat |
+| `--accent` | `#0A6E4F` | `#7DF0C2` | CTA, fokus, sweep scan. Hemat |
 | `--accent-ink` | `#F2F3EF` | `#06231A` | Teks di atas aksen |
-| `--finding-attention` | `#C8363B` | `#FF6B6F` | Kelompok perlu perhatian |
+| `--finding-attention` | `#B23034` | `#FF6B6F` | Kelompok perlu perhatian |
 | `--finding-treatment` | `#2E59C9` | `#7FA2FF` | Kelompok perawatan |
 | `--finding-anatomy` | `#6B7376` | `#8E9A9B` | Kelompok anatomi |
-| `--warn` | `#A86A00` | `#F2B54A` | Kuota hampir habis, kualitas rendah |
+| `--warn` | `#875500` | `#F2B54A` | Kuota hampir habis, kualitas rendah |
 
-Semua pasangan teks/latar wajib lolos WCAG 2.2 AA (cek di M0 lewat skrip kontras). Warna kelompok selalu didampingi label teks atau bentuk, tidak hanya warna.
+Semua pasangan teks/latar wajib lolos WCAG 2.2 AA, dijaga tes `web/src/app/contrast.test.ts` (token teks di `bg`, `surface`, `surface-2` untuk tema terang, gelap sistem, gelap paksa, dan lightbox). Warna kelompok selalu didampingi label teks atau bentuk, tidak hanya warna.
 
 **Heatmap colormap**: ramp perseptual "inferno" (hitam → ungu → oranye → kuning muda), alpha naik bersama intensitas, opacity default 0,55.
 

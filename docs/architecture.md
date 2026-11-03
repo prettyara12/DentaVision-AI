@@ -109,7 +109,7 @@ Hasil spike M1 (2026-10-25, #7): pada 5 panoramik contoh, heatmap P3 jatuh di da
 - Metadata Space (`sdk: docker`, `app_port: 7860`) ada di front matter `api/README.md`. Isi folder `api/` adalah root repo Space.
 - CI job `Model Smoke Test` mem-build image yang sama, menjalankannya, menunggu `/health` = `ready`, lalu memanggil `/v1/analyze` dengan gambar sintetis.
 - Deploy dijalankan pengguna (butuh token HF dengan akses tulis, jangan dibagikan):
-  1. Buat Space Docker (hardware CPU basic) di akun HF pengguna, lalu isi secret `API_SECRET` di Settings.
+  1. Buat Space Docker (hardware CPU basic) di akun HF pengguna, lalu isi secret `API_SECRET` di Settings. Per [dokumentasi HF](https://huggingface.co/docs/hub/spaces-overview) (dicek 2026-11-02), membuat Space Docker baru butuh paket berbayar; Space proyek ini dibuat sebelumnya dan hanya di-update.
   2. `hf auth login`, lalu dari folder `api/`: `hf upload <owner>/<space> . . --repo-type space --include "Dockerfile" --include ".dockerignore" --include "README.md" --include "requirements.txt" --include "app/*.py"`. `--include` mencegah `.env` dan file lokal lain ikut ter-upload.
   3. Tunggu build selesai, cek `https://<owner>-<space>.hf.space/health` → `ready`, lalu `curl` sebuah gambar ke `/v1/analyze` dengan header `X-API-Secret`.
 
