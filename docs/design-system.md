@@ -50,7 +50,7 @@ Referensi yang dipelajari (dibuka di browser saat M2 dan M5 untuk detail):
 
 ## 3. Tokens
 
-CSS variables di `@theme` Tailwind v4. Tema terang/gelap mengikuti sistem dengan toggle manual (`data-theme`). Ruang gelap (`[data-room="lightbox"]`) selalu memakai palet gelap, apa pun temanya.
+CSS variables di `@theme` Tailwind v4. Tema terang/gelap mengikuti sistem dengan toggle manual (`data-theme`, disimpan di `localStorage`, lihat [architecture §4.5](architecture.md#45-i18n)). Ruang gelap (`[data-room="lightbox"]`) selalu memakai palet gelap, apa pun temanya.
 
 ### 3.1 Warna
 
@@ -62,14 +62,14 @@ CSS variables di `@theme` Tailwind v4. Tema terang/gelap mengikuti sistem dengan
 | `--ink` | `#0D1214` | `#E6EBEA` | Teks utama |
 | `--ink-2` | `#4C5558` | `#8E9A9B` | Teks sekunder, label mono |
 | `--rule` | `#CFD4CC` | `#263033` | Hairline, border |
-| `--accent` | `#0B7A57` | `#7DF0C2` | CTA, fokus, sweep scan. Hemat |
+| `--accent` | `#0A6E4F` | `#7DF0C2` | CTA, fokus, sweep scan. Hemat |
 | `--accent-ink` | `#F2F3EF` | `#06231A` | Teks di atas aksen |
-| `--finding-attention` | `#C8363B` | `#FF6B6F` | Kelompok perlu perhatian |
+| `--finding-attention` | `#B23034` | `#FF6B6F` | Kelompok perlu perhatian |
 | `--finding-treatment` | `#2E59C9` | `#7FA2FF` | Kelompok perawatan |
 | `--finding-anatomy` | `#6B7376` | `#8E9A9B` | Kelompok anatomi |
-| `--warn` | `#A86A00` | `#F2B54A` | Kuota hampir habis, kualitas rendah |
+| `--warn` | `#875500` | `#F2B54A` | Kuota hampir habis, kualitas rendah |
 
-Semua pasangan teks/latar wajib lolos WCAG 2.2 AA (cek di M0 lewat skrip kontras). Warna kelompok selalu didampingi label teks atau bentuk, tidak hanya warna.
+Semua pasangan teks/latar wajib lolos WCAG 2.2 AA, dijaga tes `web/src/app/contrast.test.ts` (token teks di `bg`, `surface`, `surface-2` untuk tema terang, gelap sistem, gelap paksa, dan lightbox). Warna kelompok selalu didampingi label teks atau bentuk, tidak hanya warna.
 
 **Heatmap colormap**: ramp perseptual "inferno" (hitam → ungu → oranye → kuning muda), alpha naik bersama intensitas, opacity default 0,55.
 
@@ -113,7 +113,7 @@ Library: **Motion** (`motion/react`). Gerak menjelaskan perubahan state atau men
 
 1. **Hero sweep.** Panoramik contoh di hero. Garis scan `--accent` menyapu kiri → kanan. Saat dilewati, kotak temuan digambar (stroke-dashoffset) dan callout mono muncul dengan leader line. Berulang pelan setiap 8 detik; berhenti saat tab tidak terlihat.
 2. **Lampu dimatikan.** Masuk ke hasil: latar terang menyusut menjadi gelap lewat `clip-path: circle()` yang berpusat di gambar.
-3. **Analisis nyata.** Selama `analyzing`, sweep berjalan di atas gambar milik pengguna, dan label langkah (`01 VALIDASI`, `02 DETEKSI`, `03 HEATMAP`) maju mengikuti tahap server yang sebenarnya.
+3. **Analisis nyata.** Selama `analyzing`, sweep berjalan di atas gambar milik pengguna, dan label langkah (`01 VALIDASI`, `02 DETEKSI & HEATMAP`) maju mengikuti tahap server yang sebenarnya. Deteksi dan heatmap satu panggilan ke API inferensi, jadi tidak dibuat dua langkah (keputusan pengguna 2026-10-25, #9).
 4. **Hover sinkron.** Hover item daftar temuan → kotak di viewer menebal dan kotak lain meredup (opacity 0,25). Berlaku dua arah.
 5. **Insight streaming.** Teks muncul per kalimat (bukan per karakter), kartu temuan masuk stagger 60 ms.
 
@@ -128,7 +128,7 @@ Basis shadcn/ui (Radix + Lucide), semua di-restyle dengan tokens. Tampilan defau
 
 | Komponen | Isi | State |
 |---|---|---|
-| `XrayViewer` | Gambar + layer kotak (SVG) + layer heatmap (canvas); zoom/pan/pinch | loading, ready, heatmap on/off |
+| `XrayViewer` | Gambar + layer kotak (elemen HTML diposisikan di ruang layar agar garis dan label tetap tajam saat zoom) + layer heatmap (canvas); zoom/pan/pinch | loading, ready, heatmap on/off |
 | `FindingBox` | Kotak 2 px warna kelompok + callout mono `LABEL · 0.00` | default, hover, dimmed, hidden |
 | `FindingList` | Daftar dikelompokkan, header kelompok + jumlah, item = nama + confidence + jumlah kotak | collapsed (anatomy default), empty |
 | `HeatmapControl` | Pilih kelas + slider opacity + 1 kalimat cara membaca | off, on(class) |
@@ -138,13 +138,16 @@ Basis shadcn/ui (Radix + Lucide), semua di-restyle dengan tokens. Tampilan defau
 | `Dropzone` | Area drop + tombol pilih file + "Coba contoh" + toggle "Jangan simpan" (login) | idle, dragover, invalid, preparing |
 | `ScanProgress` | Sweep + langkah bernomor mengikuti tahap server | waking, analyzing, rejected, error |
 | `Disclaimer` | 1 kalimat + tautan Tentang model | inline, footer |
+| `Select` | Dropdown tunggal untuk semua pilihan (`web/src/components/ui/select.tsx`, Radix Select). Daftar selebar pemicu dan dibatasi ruang viewport, jadi tidak melewati layar 360 px. Jangan pakai `<select>` native | closed, open, highlighted, checked |
 | `QuotaNotice` | Sisa kuota / waktu reset / ajakan login | warn, exceeded |
+| `HeroSweep` | Panoramik contoh (`restorations`) + kotak per kelompok + penanda mono bernomor `01`… di gambar, keterangan nama · confidence di bawahnya (bukan callout di atas kotak, agar tidak bertumpuk di 360 px) + atribusi | animating, reduced-motion (state akhir) |
+| `LanguageToggle` / `ThemeToggle` | Label mono di header: kode bahasa tujuan (`EN`/`ID`) dan nama tema aktif. Di < 640 px tautan akun dilipat ke menu | system, light, dark |
 
 ## 6. Layout responsif
 
 | Breakpoint | Ruang terang | Lightbox (hasil) |
 |---|---|---|
-| < 640 | Satu kolom; nav atas ringkas + menu sheet | Viewer penuh lebar di atas (tinggi 55vh). Di bawahnya tab **Temuan / Ringkasan / Chat**. Chat sebagai bottom sheet di atas keyboard |
+| < 640 | Satu kolom; nav atas ringkas + menu sheet | Viewer penuh lebar di atas (tinggi 55vh). Di bawahnya tab **Temuan / Ringkasan / Chat**. Chat sebagai bottom sheet modal di atas keyboard: konten di belakangnya `inert`, Esc / "Tutup chat" / ketuk backdrop kembali ke tab sebelumnya dan fokus balik ke tab Chat |
 | 640–1024 | Dua kolom fleksibel | Viewer atas, panel tab di bawah |
 | ≥ 1024 | Grid 12 kolom | Viewer kiri (8 kolom), panel kanan (4 kolom) dengan tab Temuan / Ringkasan / Chat |
 

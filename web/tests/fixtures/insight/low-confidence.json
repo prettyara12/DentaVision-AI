@@ -1,0 +1,20 @@
+{
+  "locale": "id",
+  "detections": [
+    {
+      "class_id": 0,
+      "confidence": 0.27,
+      "box": [0.15, 0.6, 0.22, 0.8]
+    },
+    {
+      "class_id": 7,
+      "confidence": 0.26,
+      "box": [0.75, 0.6, 0.82, 0.8]
+    },
+    {
+      "class_id": 14,
+      "confidence": 0.15,
+      "box": [0.2, 0.25, 0.27, 0.45]
+    }
+  ]
+}

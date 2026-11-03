@@ -31,7 +31,7 @@ api/                      FastAPI, Python 3.13
   app/main.py             endpoint
   app/model.py            load model dari HF Hub, inferensi
   app/gradcam.py          Grad-CAM per kelas
-  app/prefilter.py        cek saturasi warna (OpenCV)
+  app/prefilter.py        cek tipe/ukuran + decode upload, cek saturasi warna
   tests/
   Dockerfile              image untuk HF Spaces
 supabase/
@@ -47,7 +47,7 @@ docs/
 
 | Method | Path | Auth | Fungsi |
 |---|---|---|---|
-| `GET` | `/health` | — | `{"status": "ready" \| "loading", "model_version": "..."}` |
+| `GET` | `/health` | — | `{"status": "ready" \| "loading" \| "error", "model_version": "..."}`. `error` = model gagal dimuat (lihat log) |
 | `POST` | `/v1/analyze` | Header `X-API-Secret` | Multipart `image` (JPEG/PNG ≤ 4 MB) → hasil |
 
 Respons `/v1/analyze` (200):
@@ -74,32 +74,44 @@ Error:
 | Status | `code` | Kapan |
 |---|---|---|
 | 401 | `unauthorized` | Secret salah |
-| 413 | `too_large` | > 4 MB |
+| 411 | `length_required` | Request tanpa `Content-Length` (mis. chunked) |
+| 413 | `too_large` | Body > 4 MB + 64 KB, gambar > 4 MB, atau > 25 juta piksel |
 | 415 | `unsupported_type` | Bukan JPEG/PNG (dicek dari magic bytes) |
-| 422 | `not_xray` | Pre-filter: saturasi warna tinggi, atau tidak ada `Permanent Teeth`/`Primary teeth` terdeteksi |
-| 503 | `busy` / `loading` | Antrean > 60 dtk / model belum siap |
+| 422 | `not_xray` | Pre-filter: > 15% piksel bersaturasi > 40 **dan** rata-rata saturasi > 20 (HSV, 0–255), pola yang sama dengan repo skripsi. Dicek sebelum model jalan |
+| 503 | `busy` / `loading` / `model_unavailable` | Antrean > 60 dtk / model sedang dimuat / model gagal dimuat (`/health` = `error`, perlu restart) |
+
+- Hasil tanpa deteksi tetap 200 dengan `detections: []`. Tidak ada aturan "harus ada kelas gigi": pada 31 panoramik contoh, model tidak pernah mendeteksi `Permanent Teeth`/`Primary teeth` (keputusan pengguna 2026-10-25, #6). Validasi utama "apakah ini X-ray gigi" ada di Gemini Vision (web, [ai-design.md §1](ai-design.md#1-validasi-x-ray-validate1)).
+- Secret dan `Content-Length` dicek di middleware **sebelum** body dibaca, karena Starlette mem-parse dan men-spool seluruh multipart sebelum handler jalan. Urutan: 401 → 411 → 413.
+- Decode memakai Pillow; gambar > 25 juta piksel ditolak `too_large` (perlindungan decompression bomb). File rusak di balik magic bytes yang valid ditolak `unsupported_type`.
 
 ### 3.2 Model
 
-- Checkpoint `best_resnet50.pt` disimpan di model repo HF Hub (`HF_MODEL_REPO`, `HF_MODEL_FILE`, `HF_TOKEN` bila privat). Diunduh sekali saat start lewat `huggingface_hub`, lalu di-cache.
+- Checkpoint `best_resnet50.pt` disimpan di model repo HF Hub publik [`adrielwalintukan/dentavision-yolov8m-resnet50`](https://huggingface.co/adrielwalintukan/dentavision-yolov8m-resnet50) (lisensi AGPL-3.0, mengikuti Ultralytics), dibaca dari `HF_MODEL_REPO` + `HF_MODEL_FILE`. Karena publik, `HF_TOKEN` tidak dibutuhkan. Diunduh sekali saat start lewat `huggingface_hub`, lalu di-cache.
 - `ultralytics==8.4.161` di-pin, sama dengan versi training. Checkpoint memakai modul `TorchVision` + `Index` yang butuh versi ini.
 - Inferensi: `imgsz=640`, `conf=0.10`, `iou=0.7`, device `cuda` bila ada, selain itu `cpu`.
 - **Satu inferensi dalam satu waktu** (`asyncio.Lock`, 1 worker uvicorn). Ini antrean sederhana untuk CPU gratis.
 
 ### 3.3 Grad-CAM per kelas
 
-1. Letterbox gambar ke 640 seperti preprocessing ultralytics, simpan padding.
-2. Forward ulang `model.model` dengan grad aktif, ambil aktivasi + gradien dari layer target lewat hook. Default: output **SPPF** (sama dengan repo skripsi).
-3. Untuk setiap kelas `c` yang terdeteksi: skor = jumlah logit kelas `c` pada anchor yang menjadi deteksi terpilih kelas `c`. `backward(retain_graph=True)`.
-4. Bobot = rata-rata gradien per channel; CAM = ReLU(Σ bobot × aktivasi); normalisasi 0–1.
-5. Buang padding letterbox, resize ke sisi terpanjang 256 px, encode PNG.
+1. Input = tensor dari `predictor.preprocess()` ultralytics, persis tensor yang dipakai deteksi (letterbox rect: sisi panjang 640, sisi pendek dibulatkan ke kelipatan 32, padding di tengah, resize cv2). Area gambar di dalam padding dihitung ulang dengan aturan `LetterBox` yang sama (dites terhadap `LetterBox` asli).
+2. Satu forward `model.model` per request dengan grad aktif. Aktivasi layer target diambil lewat forward hook. Layer target: **P3**, input pertama `Detect` (`model[-1].f[0]`, layer 10, stride 8). Skor kelas dibaca dari baris `4:` output `Detect`, baris yang sama yang dibaca NMS; susunan ini diperiksa saat runtime dan di smoke test.
+3. Untuk setiap kelas `c` dengan deteksi ≥ 0,25: skor = jumlah probabilitas kelas `c` pada anchor dengan probabilitas ≥ 0,25 dan argmax = `c`. Bila tidak ada anchor seperti itu, pakai anchor terkuat kelas `c`. Gradien via `torch.autograd.grad(retain_graph=True)`, satu kali per kelas.
+4. Bobot = rata-rata gradien per channel; CAM = ReLU(Σ bobot × aktivasi), upsample bilinear ke ukuran input, normalisasi 0–1 terhadap puncaknya.
+5. Buang padding letterbox, resize ke sisi terpanjang 256 px, encode PNG grayscale.
 
-Spike M1: bandingkan SPPF (stride 32, kasar) dengan output neck P3 (stride 8, lebih tajam) pada 5 gambar. Pilihan final dicatat di sini.
+Hasil spike M1 (2026-10-25, #7): pada 5 panoramik contoh, heatmap P3 jatuh di dalam kotak deteksi pada 5/5 gambar; SPPF (stride 32) menyebar atau meleset pada 3/5. Waktu di CPU ±2–5 detik per request (forward + semua kelas), PNG 13–29 KB per kelas. Pilihan final: **P3**.
 
 ### 3.4 Deploy
 
-- HF Space tipe Docker, `api/Dockerfile`, port 7860. Secret Space: `API_SECRET`, `HF_TOKEN`.
+- HF Space tipe Docker, `api/Dockerfile`, port 7860. Secret Space: `API_SECRET` (`HF_TOKEN` hanya bila model repo dijadikan privat).
 - Torch versi CPU (`--index-url https://download.pytorch.org/whl/cpu`) supaya image kecil.
+- Image: `python:3.13-slim` + `libgl1`/`libglib2.0-0` (dibutuhkan `opencv-python` dari ultralytics), user UID 1000 sesuai aturan Spaces, 1 worker uvicorn. `HF_MODEL_REPO`/`HF_MODEL_FILE` punya default di Dockerfile. Checkpoint diunduh saat start (tidak ikut image), jadi `/health` = `loading` sampai model siap.
+- Metadata Space (`sdk: docker`, `app_port: 7860`) ada di front matter `api/README.md`. Isi folder `api/` adalah root repo Space.
+- CI job `Model Smoke Test` mem-build image yang sama, menjalankannya, menunggu `/health` = `ready`, lalu memanggil `/v1/analyze` dengan gambar sintetis.
+- Deploy dijalankan pengguna (butuh token HF dengan akses tulis, jangan dibagikan):
+  1. Buat Space Docker (hardware CPU basic) di akun HF pengguna, lalu isi secret `API_SECRET` di Settings. Per [dokumentasi HF](https://huggingface.co/docs/hub/spaces-overview) (dicek 2026-11-02), membuat Space Docker baru butuh paket berbayar; Space proyek ini dibuat sebelumnya dan hanya di-update.
+  2. `hf auth login`, lalu dari folder `api/`: `hf upload <owner>/<space> . . --repo-type space --include "Dockerfile" --include ".dockerignore" --include "README.md" --include "requirements.txt" --include "app/*.py"`. `--include` mencegah `.env` dan file lokal lain ikut ter-upload.
+  3. Tunggu build selesai, cek `https://<owner>-<space>.hf.space/health` → `ready`, lalu `curl` sebuah gambar ke `/v1/analyze` dengan header `X-API-Secret`.
 
 ## 4. Web (`web/`)
 
@@ -107,17 +119,47 @@ Spike M1: bandingkan SPPF (stride 32, kasar) dengan output neck P3 (stride 8, le
 
 | Method | Path | Fungsi |
 |---|---|---|
-| `POST` | `/api/scans` | Upload → kuota → validasi Gemini → `/v1/analyze` → (login & simpan) simpan. Respons: hasil + `scan_id` bila tersimpan |
-| `GET` | `/api/samples/[key]` | Hasil contoh (cache statis, tanpa kuota) |
+| `POST` | `/api/scans` | Upload → kuota → validasi Gemini → `/v1/analyze` → (login & simpan) simpan. Respons: stream event NDJSON (di bawah); hasil + `scan_id` bila tersimpan |
+| `GET` | `/api/samples/[key]` | Hasil contoh (cache statis, tanpa kuota). `key` = `impacted`, `restorations`, `missing`. 200 = hasil `/v1/analyze` yang dihitung sekali dengan API lokal (`web/src/features/scan/samples/*.json`), di-prerender saat build; 404 `not_found` untuk key lain. Gambarnya file statis `web/public/samples/{key}.jpg` (+ `-thumb.jpg`), sisi terpanjang 2048 px seperti upload. Tanpa validasi Gemini dan tanpa panggilan inferensi |
 | `POST` | `/api/scans/import` | Simpan hasil tamu (US-10) |
 | `DELETE` | `/api/scans/[id]` | Hapus scan + file Storage + chat terkait |
-| `POST` | `/api/insight` | Stream insight untuk daftar temuan; bila `scan_id` ada, simpan hasil akhir |
-| `POST` | `/api/chat` | Stream jawaban chat (per scan / umum) |
+| `POST` | `/api/insight` | Stream insight untuk daftar temuan; bila `scan_id` ada, simpan hasil akhir (M4). Body JSON `{ locale, detections }` (≤ 64 KB, ≤ 500 deteksi, skema sama dengan `/v1/analyze`), tanpa gambar. Respons NDJSON: `{type:"partial", insight}` berulang (JSON parsial dari stream Gemini, kartu hanya untuk `class_key` yang ada di konteks, urutan dari kode), lalu `{type:"done", insight}` (tervalidasi Zod) atau `{type:"error"}`. Error request: 411, 413, 400 `invalid_request` |
+| `POST` | `/api/chat` | Stream jawaban chat (per scan / umum). Body JSON `{ locale, messages, scan? }` (≤ 256 KB): `messages` = riwayat `{role:"user"|"model", text}` (1–100, user ≤ 2.000 karakter, model ≤ 4.000), `scan` = `{ detections, insightSummary? }` untuk chat per scan, tanpa gambar. Server memakai 20 pesan terakhir yang dimulai giliran `user` dan wajib diakhiri pertanyaan `user`. Respons NDJSON: `{type:"delta", text}` berulang, lalu `{type:"done"}` atau `{type:"error"}`. Error request: 411, 413, 400 `invalid_request` |
 | `DELETE` | `/api/chats/[id]` | Hapus chat |
 | `DELETE` | `/api/account` | Hapus akun + semua data |
-| `GET` | `/api/health` | Teruskan status API inferensi (untuk state `waking`) |
+| `GET` | `/api/health` | Teruskan status API inferensi (untuk state `waking`): `ready`, `loading`, `error`, atau `waking` (Space tidur/tidak menjawab dalam 3 detik) |
 
 Setiap handler: autentikasi (opsional untuk tamu) → otorisasi kepemilikan → validasi Zod → kuota → aksi.
+
+**Kuota** (`web/src/lib/quota.ts`):
+
+- Subjek: `u:{user_id}` untuk login, `ip:{sha256(ip + IP_HASH_SALT)}` untuk tamu.
+- Scan:
+  - Sebelum memanggil Gemini, `/api/scans` membaca counter. Bila kuota habis, respons `429 quota_exceeded` beserta header `RateLimit-*` dan `Retry-After`.
+  - Kuota baru dipotong (`consume_quota`, atomik) setelah inferensi menghasilkan scan. Penolakan Gemini, `not_xray` dari pre-filter, dan `busy`/`loading`/`unavailable` tidak dihitung.
+  - Untuk pengguna login yang menyimpan, scan disimpan **sebelum** kuota dipotong, sehingga simpan yang gagal tidak memakai kuota. Bila pemotongan kuota ditolak atau RPC error, scan yang baru tersimpan dihapus lagi (`deleteScan`, Storage dulu) sebelum event error dikirim.
+  - Bila beberapa request paralel lolos pre-check, request yang kalah di `consume_quota` tidak menerima hasilnya. Ia mendapat event `error` `quota_exceeded`, tanpa header, karena stream sudah 200.
+- Chat:
+  - Kuota dipotong setelah otorisasi dan validasi (kepemilikan `chatId`/`scanId` diperiksa lebih dulu), sebelum memanggil Gemini. Bila habis, respons `429` dengan header yang sama.
+  - Baris `chats` baru dibuat setelah kuota berhasil dipotong, sehingga respons `429`/`503` tidak meninggalkan chat kosong.
+  - Kuota chat dihitung per pesan yang diproses: kegagalan Gemini atau database setelah kuota dipotong tetap terhitung.
+- Fail-closed: bila counter atau RPC gagal dibaca, scan menjawab `503 unavailable` (atau event `error` `unavailable` bila stream sudah berjalan), dan chat menjawab `503 unavailable`. Kegagalan ini tidak pernah dianggap "kuota kosong" maupun "kuota habis".
+- Batas kepercayaan IP: IP tamu dibaca dari `x-forwarded-for` (nilai pertama), lalu `x-real-ip`. Di Vercel, kedua header ditulis platform, dan `X-Forwarded-For` dari klien ditimpa ("do not forward external IPs"), sehingga tidak bisa dipalsukan. Bila di-deploy di luar Vercel, proxy di depan app wajib menghapus header masuk lalu mengisinya sendiri; tanpa itu tamu bisa berganti IP untuk mendapat kuota baru. Tanpa header (dev lokal), semua tamu berbagi `127.0.0.1`.
+
+**`POST /api/scans`**, `multipart/form-data` dengan `image` (JPEG/PNG terkompres) dan `locale` (`id`/`en`, default `id`).
+
+- Ditolak sebelum stream dimulai, dengan JSON `{ "code": ... }`: `411 length_required` (tanpa `Content-Length` yang valid, ditolak sebelum body dibaca), `400 invalid_request` (tanpa `image`), `413 too_large` (body/gambar > 4 MB), `415 unsupported_type` (magic bytes bukan JPEG/PNG). Dimensi diperiksa API inferensi (≤ 25 M piksel).
+- Batas byte `/api/scans`, `/api/insight`, dan `/api/chat` ditegakkan pada byte yang benar-benar dibaca (`web/src/lib/body.ts`), bukan hanya dari header, jadi `Content-Length` yang dipalsukan kecil tetap berakhir 413.
+- Selain itu respons `200` `application/x-ndjson`, satu objek per baris, sesuai urutan tahap di server:
+
+  ```json
+  { "type": "stage", "stage": "validating" }
+  { "type": "stage", "stage": "analyzing" }
+  { "type": "result", "result": { "...": "kontrak /v1/analyze §3.1" } }
+  ```
+
+  Event akhir adalah salah satu dari `result`, `rejected` (`reason`: kalimat Gemini, atau `null` bila ditolak pre-filter API), atau `error` (`code`: `busy`, `loading`, `unavailable`, `too_large`, `unsupported_type`).
+- Respons `/v1/analyze` divalidasi dengan Zod (`web/src/features/scan/result.ts`) sebelum diteruskan.
 
 ### 4.2 Gambar
 
@@ -130,11 +172,27 @@ Setiap handler: autentikasi (opsional untuk tamu) → otorisasi kepemilikan → 
 - Model dari env: `GEMINI_MODEL` (`gemini-3.5-flash-lite`), `GEMINI_FALLBACK_MODEL`. Pada 429 / `RESOURCE_EXHAUSTED`, coba model cadangan sekali.
 - Prompt, skema, dan guardrail: [ai-design.md](ai-design.md).
 
-### 4.4 i18n
+### 4.4 Auth (`@supabase/ssr`)
 
-File `messages/{id,en}.json` + helper `t()` kecil di `src/lib/i18n.ts`. Locale dari cookie `locale`, default dari `Accept-Language`. URL tidak diberi prefix bahasa.
+- Login email/password dan Google lewat Supabase Auth, dengan verifikasi email dan reset password lewat tautan email (PKCE). Server Actions ada di `src/features/auth/actions.ts`, dan halamannya `/[lang]/login`, `/[lang]/register`, `/[lang]/reset-password` (`?mode=update` setelah tautan reset).
+- `GET /auth/callback?code=…&next=…` (tanpa prefix bahasa, didaftarkan di Supabase) menukar `code` jadi sesi cookie lalu redirect ke `next`. `next` hanya boleh path halaman di bawah `/id` atau `/en` (`safeNext`, mencegah open redirect). Kalau gagal (tautan kedaluwarsa, dibuka di browser lain, persetujuan Google dibatalkan), diarahkan ke `/[lang]/login?error=link`.
+- Client server-side di `src/lib/supabase/server.ts` (anon key + cookie sesi, jadi RLS berlaku). `src/proxy.ts` me-refresh token sesi sebelum render, hanya bila ada cookie `sb-…-auth-token`. Tamu tidak memicu panggilan Supabase.
+- Pesan galat tidak membuka apakah email terdaftar: daftar ulang dan minta reset selalu menjawab "tautan dikirim".
+- Header situs menampilkan "Masuk" atau email + "Keluar". Di halaman hasil, header ikut ruang gelap.
 
-`shortcut: tanpa prefix /en di URL, SEO bahasa Inggris lemah; upgrade ke next-intl + prefix bila trafik organik penting.`
+### 4.5 i18n
+
+File `messages/{id,en}.json` + helper `t()` kecil di `src/lib/i18n.ts`. Semua halaman ada di bawah segmen `app/[lang]/` (`/id/...`, `/en/...`), sesuai panduan i18n resmi Next.js 16. Dengan `cacheComponents`, pola ini membuat halaman tetap bisa di-prerender statis, dan `<html lang>` benar per bahasa.
+
+`src/proxy.ts` mengarahkan URL tanpa prefix ke locale pilihan: cookie `locale`, lalu `Accept-Language`, lalu `id`.
+
+Toggle bahasa di header (`src/components/language-toggle.tsx`) memanggil Server Action `switchLocale` (`src/features/preferences/actions.ts`):
+
+- Menulis cookie `locale` (1 tahun, `HttpOnly`, `SameSite=Lax`). Bila login, juga `profiles.locale` (kolom yang memang boleh di-update `authenticated`). Gagal menulis profil tidak membatalkan pergantian bahasa.
+- Mengembalikan halaman yang sama dengan prefix lain. Path divalidasi `safeNext`, jadi tidak bisa keluar situs; query ikut dipertahankan.
+- Klien lalu memuat ulang halaman penuh (`location.assign`). `[lang]` adalah root layout, dan navigasi klien antar-locale membuat `<html>` kehilangan atribut `lang`, font, dan tema.
+
+Tema (`src/components/theme-toggle.tsx`): siklus Sistem → Terang → Gelap. Pilihan disimpan di `localStorage` `theme` sebagai preferensi tampilan, bukan data scan. Skrip kecil di awal `<body>` memasang `data-theme` sebelum paint.
 
 ## 5. Data model (Supabase)
 
@@ -150,12 +208,12 @@ scans (
   id uuid pk default gen_random_uuid(),
   user_id uuid not null references auth.users on delete cascade,
   created_at timestamptz default now(),
-  image_path text not null,          -- scans/{user_id}/{id}/original.jpg
+  image_path text not null,          -- {user_id}/{id}/original.jpg di bucket `scans` (check constraint)
   image_width int not null,
   image_height int not null,
   model_version text not null,
   detections jsonb not null,         -- array dari respons /v1/analyze
-  heatmap_class_ids smallint[] not null,
+  heatmap_class_ids smallint[] not null, -- tiap id 0..30 (check)
   insight jsonb,                     -- output tervalidasi, lihat ai-design §3
   insight_locale text,
   insight_prompt_version text,
@@ -190,7 +248,9 @@ usage_counters (
 
 Fungsi `consume_quota(subject text, kind text, max int) returns boolean`: `insert ... on conflict do update set count = count + 1 where count < max`, atomik. `security definer`, hanya bisa dieksekusi `service_role`.
 
-Trigger `on auth.users insert` → buat `profiles`.
+Trigger `on auth.users insert` → buat `profiles` (`display_name` dari metadata `full_name`/`name`, mis. Google). Trigger `on chat_messages insert` → `chats.updated_at = now()`.
+
+Implementasi: `supabase/migrations/20261026000000_initial_schema.sql`. Tes: `supabase/tests/` (RLS per tabel + cascade, kuota, Storage).
 
 ### 5.1 RLS
 
@@ -204,8 +264,8 @@ Trigger `on auth.users insert` → buat `profiles`.
 
 ### 5.2 Storage
 
-- Bucket `scans`, **privat**. Path `{user_id}/{scan_id}/original.jpg` dan `{user_id}/{scan_id}/heatmap-{class_id}.png`.
-- Policy: user hanya bisa membaca/menulis/menghapus objek dengan prefix `{auth.uid()}/`.
+- Bucket `scans`, **privat**, maks 5 MB per objek, hanya `image/jpeg` / `image/png`. Path `{user_id}/{scan_id}/original.jpg` dan `{user_id}/{scan_id}/heatmap-{class_id}.png`. Nama `original.jpg` kanonis (dikunci check constraint `scans.image_path` dan policy Storage), bukan penanda format. Browser selalu mengirim JPEG (§4.2), tetapi bila klien API mengirim PNG, objek tetap bernama `original.jpg` dengan `contentType` sesuai magic bytes (`image/png`).
+- Policy: user hanya bisa membaca/menulis/menghapus objek dengan path kanonis di bawah prefix `{auth.uid()}/` (`{scan_id}/original.jpg` atau `{scan_id}/heatmap-{0..30}.png`, lewat `public.is_own_scan_object`). Nama lain ditolak.
 - Browser membaca lewat signed URL (berlaku 1 jam) dari server.
 - Hapus scan/akun menghapus objek Storage lebih dulu, baru baris DB. Kalau hapus Storage gagal, baris DB tidak dihapus dan user mendapat error.
 
@@ -230,12 +290,14 @@ Divalidasi lazy di `src/lib/env.ts` (Zod) supaya `next build` di CI tidak butuh 
 
 ### `api/.env`
 
+API tidak membaca file `.env`: variabel diisi lewat environment proses (shell saat lokal, Settings saat di HF Space). `api/.env.example` hanya daftar nama.
+
 | Variabel | Contoh |
 |---|---|
 | `API_SECRET` | sama dengan `INFERENCE_API_SECRET` |
-| `HF_MODEL_REPO` | ditentukan pemilik repo di M0 |
+| `HF_MODEL_REPO` | `adrielwalintukan/dentavision-yolov8m-resnet50` (juga repo variable GitHub Actions) |
 | `HF_MODEL_FILE` | `best_resnet50.pt` |
-| `HF_TOKEN` | bila model repo privat |
+| `HF_TOKEN` | tidak perlu selama model repo publik |
 | `MODEL_PATH` | opsional: path lokal, melewati HF Hub (dev) |
 
 ## 7. Pengujian

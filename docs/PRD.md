@@ -93,7 +93,7 @@ Laporan PDF, ensiklopedia 31 kondisi, halaman profil/pengaturan, heatmap per kot
 - Gambar dikompres di browser (sisi terpanjang 2048 px, JPEG) sebelum dikirim.
 - File bukan gambar atau > 10 MB ditolak di browser **dan** server.
 - Gambar yang bukan X-ray gigi ditolak dengan pesan jelas dan **tidak memakai kuota**.
-- Kalau Gemini tidak tersedia, validasi cukup memakai pre-filter + cek "ada gigi terdeteksi".
+- Kalau Gemini tidak tersedia, validasi cukup memakai pre-filter saturasi warna di API inferensi.
 
 **US-03 Lihat hasil.** Sebagai pengguna, saya ingin melihat temuan di atas X-ray saya.
 - Kotak temuan berwarna sesuai kelompok, dengan label kelas + confidence.
@@ -137,7 +137,7 @@ Laporan PDF, ensiklopedia 31 kondisi, halaman profil/pengaturan, heatmap per kot
 
 ### Semua
 
-**US-13 Bahasa.** Toggle ID/EN di header, tersimpan di cookie (dan profil bila login). Default dari `Accept-Language`.
+**US-13 Bahasa.** Toggle ID/EN di header mengganti prefix URL (`/id`, `/en`) dan tersimpan di cookie (dan profil bila login). URL tanpa prefix diarahkan ke cookie, lalu `Accept-Language`, lalu `id`.
 
 **US-14 Kuota.** Saat kuota habis, tampil sisa waktu reset dan ajakan login (untuk tamu). Angka ada di §7.
 
@@ -201,5 +201,5 @@ Konsekuensi produk:
 | X-ray adalah data kesehatan | Tamu tidak disimpan; login privat + RLS; hapus permanen ([security-privacy.md](security-privacy.md)) |
 | HF Space tidur → kunjungan pertama lambat | Status "menyiapkan server" yang jujur + ping saat landing dibuka |
 | Kuota Gemini habis | Model cadangan saat 429; deteksi tetap jalan tanpa Gemini |
-| Lisensi gambar contoh / dataset | Gambar contoh hanya dari sumber berlisensi jelas (**Perlu keputusan pengguna**, roadmap M2) |
+| Lisensi gambar contoh / dataset | Gambar contoh hanya dari sumber berlisensi jelas: diputuskan 2026-10-26 (#12), Wikimedia Commons CC BY 3.0 + Mendeley Data CC BY 4.0, dengan atribusi. Lisensi dataset training masih **Perlu keputusan pengguna** (roadmap) |
 | Supabase ter-pause | Catatan di README; ping terjadwal hanya bila diputuskan nanti |

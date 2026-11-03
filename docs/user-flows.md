@@ -16,6 +16,8 @@
 | `/settings` | Bahasa, hapus akun | Login | Terang |
 | `/privacy`, `/about-model` | Transparansi | Publik | Terang |
 
+Semua rute halaman diberi prefix bahasa (`/id/scan`, `/en/scan`), lihat [architecture.md §4.5](architecture.md#45-i18n). Route Handler `/api/*` dan callback `/auth/callback` tidak diberi prefix (alur auth: [architecture.md §4.4](architecture.md#44-auth-supabasessr)).
+
 Area "Gelap" = workspace viewer ([design-system.md §1](design-system.md#1-konsep)).
 
 ## 2. Alur scan
@@ -59,7 +61,7 @@ stateDiagram-v2
 ```
 
 - `waking` ditampilkan bila `/api/health` API belum menjawab "ready" dalam 3 detik. Copy: "Menyiapkan server, biasanya kurang dari 1 menit".
-- Langkah di layar `analyzing` mengikuti tahap nyata (validasi → deteksi → heatmap), bukan progress bar palsu.
+- Langkah di layar `analyzing` mengikuti tahap nyata dari event `POST /api/scans` ([architecture.md §4.1](architecture.md#41-route-handlers)): `01 VALIDASI` (Gemini) → `02 DETEKSI & HEATMAP` (satu panggilan ke API inferensi, jadi tidak dipisah), bukan progress bar palsu (keputusan pengguna 2026-10-25, #9).
 
 ## 4. Simpan hasil tamu (US-10)
 
@@ -85,7 +87,7 @@ Kalau tab ditutup sebelum login selesai, data tamu hilang. Ini sesuai aturan pri
 
 - **Per scan**: panel di halaman hasil (desktop: kolom kanan; HP: bottom sheet). Untuk pengguna login, chat dibuat di DB saat pesan pertama dikirim, terhubung ke `scan_id`.
 - **Umum**: `/chat`. Pesan pertama pengguna login membuat chat baru lalu URL berganti ke `/chats/[id]`.
-- **Tamu**: riwayat pesan disimpan di `sessionStorage` dan dikirim ulang ke server setiap giliran (maks 20 pesan).
+- **Tamu**: riwayat pesan disimpan di `sessionStorage` dan dikirim ulang ke server setiap giliran (maks 20 pesan). Browser menyimpan maks 100 pesan terakhir; yang lebih lama dibuang.
 
 ## 6. Kasus khusus
 

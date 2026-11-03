@@ -82,7 +82,7 @@ Berjalan di setiap PR dan push ke `development` / `main`:
 |---|---|
 | `Web Quality Gate & Build` | `npm ci`, lint, typecheck, test, build (tanpa secret) |
 | `API Quality Gate` | ruff check + format check, pytest (tanpa `smoke`) |
-| `Model Smoke Test` | Unduh checkpoint dari HF Hub (cache), pytest `-m smoke` |
+| `Model Smoke Test` | Unduh checkpoint dari HF Hub (cache), pytest `-m smoke`, build image `api/Dockerfile` lalu `/health` + `/v1/analyze` lewat container |
 | `Database pgTAP & RLS Tests` | `supabase start`, `supabase test db` |
 
 ## 7. Performa

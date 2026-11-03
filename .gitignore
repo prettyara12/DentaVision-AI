@@ -32,3 +32,6 @@ supabase/.branches/
 Thumbs.db
 .vscode/
 .idea/
+
+# Scratch & SDD
+.superpowers/

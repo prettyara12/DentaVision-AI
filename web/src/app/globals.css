@@ -1,0 +1,215 @@
+@import "tailwindcss";
+
+/* Tokens: docs/design-system.md §3. Light = default; dark via system or data-theme; lightbox is always dark. */
+:root {
+  --bg: #f2f3ef;
+  --surface: #e8eae4;
+  --surface-2: #dde0d9;
+  --ink: #0d1214;
+  --ink-2: #4c5558;
+  --rule: #cfd4cc;
+  --accent: #0a6e4f;
+  --accent-ink: #f2f3ef;
+  --finding-attention: #b23034;
+  --finding-treatment: #2e59c9;
+  --finding-anatomy: #6b7376;
+  --warn: #875500;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0a0d0e;
+    --surface: #121718;
+    --surface-2: #1a2022;
+    --ink: #e6ebea;
+    --ink-2: #8e9a9b;
+    --rule: #263033;
+    --accent: #7df0c2;
+    --accent-ink: #06231a;
+    --finding-attention: #ff6b6f;
+    --finding-treatment: #7fa2ff;
+    --finding-anatomy: #8e9a9b;
+    --warn: #f2b54a;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"],
+[data-room="lightbox"],
+/* The site header and footer join the dark room on the result page. */
+body:has(> [data-room="lightbox"]) > header,
+body:has(> [data-room="lightbox"]) > footer {
+  --bg: #0a0d0e;
+  --surface: #121718;
+  --surface-2: #1a2022;
+  --ink: #e6ebea;
+  --ink-2: #8e9a9b;
+  --rule: #263033;
+  --accent: #7df0c2;
+  --accent-ink: #06231a;
+  --finding-attention: #ff6b6f;
+  --finding-treatment: #7fa2ff;
+  --finding-anatomy: #8e9a9b;
+  --warn: #f2b54a;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-rule: var(--rule);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-finding-attention: var(--finding-attention);
+  --color-finding-treatment: var(--finding-treatment);
+  --color-finding-anatomy: var(--finding-anatomy);
+  --color-warn: var(--warn);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --radius-sm: 4px;
+  --radius-md: 8px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+/* Scan line over the user's image while the server works (docs/design-system.md §4, `sweep`). */
+@keyframes scan-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.scan-sweep {
+  animation: scan-sweep 1600ms linear infinite;
+}
+
+/* Insight cards enter one after another, 60 ms apart (design-system §4, `quick`). */
+@keyframes insight-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.insight-rise {
+  animation: insight-rise 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* Chat bottom sheet on phones (design-system §4, motion "base"). */
+@keyframes sheet-rise {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@media (max-width: 639px) {
+  .sheet-rise {
+    animation: sheet-rise 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+}
+
+/* Hero sweep (design-system §4, moment 1): an 8 s cycle whose first 1.6 s (`sweep`) carries the
+   scan line across; each box draws when the line reaches it (its own --at delay), then all fade. */
+@keyframes hero-sweep {
+  0% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  20% {
+    transform: translateX(100%);
+    opacity: 1;
+  }
+  20.01%,
+  100% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+@keyframes hero-draw {
+  0% {
+    stroke-dashoffset: 1;
+    opacity: 1;
+  }
+  4%,
+  80% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  90%,
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+
+@keyframes hero-tag {
+  0% {
+    opacity: 0;
+  }
+  4%,
+  80% {
+    opacity: 1;
+  }
+  90%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.hero-sweep {
+  animation: hero-sweep 8s linear infinite;
+}
+
+.hero-box {
+  stroke-dasharray: 1;
+  animation: hero-draw 8s cubic-bezier(0.2, 0.8, 0.2, 1) var(--at) infinite both;
+}
+
+.hero-tag {
+  animation: hero-tag 8s linear var(--at) infinite both;
+}
+
+/* "Lights off" (design-system §4, moment 2): the dark room opens from the image area over the
+   light page, `room` timing. */
+@keyframes lights-off {
+  from {
+    clip-path: circle(0% at 50% 30%);
+  }
+  to {
+    clip-path: circle(150% at 50% 30%);
+  }
+}
+
+.lights-off {
+  animation: lights-off 700ms cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scan-sweep,
+  .hero-sweep {
+    display: none;
+  }
+  .insight-rise,
+  .sheet-rise,
+  .hero-box,
+  .hero-tag,
+  .lights-off {
+    animation: none;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
