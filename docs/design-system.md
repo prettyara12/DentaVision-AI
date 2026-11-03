@@ -69,7 +69,7 @@ CSS variables di `@theme` Tailwind v4. Tema terang/gelap mengikuti sistem dengan
 | `--finding-anatomy` | `#6B7376` | `#8E9A9B` | Kelompok anatomi |
 | `--warn` | `#875500` | `#F2B54A` | Kuota hampir habis, kualitas rendah |
 
-Semua pasangan teks/latar wajib lolos WCAG 2.2 AA, dijaga tes `web/src/app/contrast.test.ts` (token teks di `bg`, `surface`, `surface-2`, kedua tema). Warna kelompok selalu didampingi label teks atau bentuk, tidak hanya warna.
+Semua pasangan teks/latar wajib lolos WCAG 2.2 AA, dijaga tes `web/src/app/contrast.test.ts` (token teks di `bg`, `surface`, `surface-2` untuk tema terang, gelap sistem, gelap paksa, dan lightbox). Warna kelompok selalu didampingi label teks atau bentuk, tidak hanya warna.
 
 **Heatmap colormap**: ramp perseptual "inferno" (hitam → ungu → oranye → kuning muda), alpha naik bersama intensitas, opacity default 0,55.
 

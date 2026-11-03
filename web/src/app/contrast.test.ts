@@ -29,10 +29,19 @@ function contrast(a: string, b: string): number {
 const text = ["ink", "ink-2", "accent", "finding-attention", "finding-treatment", "warn"];
 const surfaces = ["bg", "surface", "surface-2"];
 
-describe.each([
+const palettes = [
   ["light", tokens(":root {")],
-  ["dark", tokens(':root[data-theme="dark"]')],
-])("%s theme", (_, t) => {
+  ["system dark", tokens(':root:not([data-theme="light"])')],
+  ["forced dark", tokens(':root[data-theme="dark"]')],
+  ["lightbox", tokens('[data-room="lightbox"]')],
+] as const;
+
+it.each(palettes)("%s palette defines every token", (_, t) => {
+  for (const name of [...text, ...surfaces, "accent-ink"])
+    expect(t[name]).toMatch(/^#[0-9a-f]{6}$/i);
+});
+
+describe.each(palettes)("%s palette", (_, t) => {
   it.each(text.flatMap((fg) => surfaces.map((bg) => [fg, bg])))("%s on %s", (fg, bg) => {
     expect(contrast(t[fg]!, t[bg]!)).toBeGreaterThanOrEqual(4.5);
   });
@@ -40,8 +49,4 @@ describe.each([
   it("accent-ink on accent", () => {
     expect(contrast(t["accent-ink"]!, t.accent!)).toBeGreaterThanOrEqual(4.5);
   });
-});
-
-it("system dark and forced dark use the same tokens", () => {
-  expect(tokens(':root:not([data-theme="light"])')).toEqual(tokens(':root[data-theme="dark"]'));
 });
